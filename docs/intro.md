@@ -2,46 +2,123 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# Concepts
 
-Let's discover **Docusaurus in less than 5 minutes**.
+## What is ETLFunnel?
 
-## Getting Started
+ETLFunnel is a developer-first ETL (Extract, Transform, Load) SaaS tool designed for on-premise installation. With a simple setup, you gain access to a comprehensive data processing platform that enables seamless data integration across multiple database systems.
 
-Get started by **creating a new site**.
+## Core Architecture
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+Our ETL tool operates on a three-tier architecture:
 
-### What you'll need
+- **Machine Layer**: Collections
+- **Schema Layer**: Flows  
+- **Entity Layer**: Pipelines
 
-- [Node.js](https://nodejs.org/en/download/) version 18.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+`[PLACEHOLDER: Architecture overview diagram screenshot]`
 
-## Generate a new site
+## Component Definitions
 
-Generate a new Docusaurus site using the **classic template**.
+### **Hub**
+Central repository for all database connections example PostgreSQL, MongoDB, and other systems. Stores connection parameters for:
+- Source databases
+- Destination databases  
+- Auxiliary databases
 
-The classic template will automatically be added to your project after you run the command:
+`[PLACEHOLDER: Hub interface screenshot]`
 
-```bash
-npm init docusaurus@latest my-website classic
-```
+### **Connectors**
+Bridge the gap between Hub connections and your database operations through a two-tier connector system:
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+#### **SQL Connectors**
+- Utilize existing SQL Hub connections to connect to relational databases as source or destination
+- Support various SQL databases (PostgreSQL, MySQL, SQL Server, etc.)
+- Contain custom hooks for data pull/push operations specific to each connector entity
 
-The command also installs all necessary dependencies you need to run Docusaurus.
+#### **NoSQL Connectors** 
+- Utilize existing NoSQL Hub connections to connect to document/key-value databases as source or destination
+- Support various NoSQL databases (MongoDB, Redis, Cassandra, etc.)
+- Contain custom hooks for data pull/push operations specific to each connector entity
 
-## Start your site
+#### **Connector Entities**
+Each connector entity contains multiple library-defined functions that provide configuration details for data operations:
 
-Run the development server:
+**Configuration Functions Examples:**
+- **PostgreSQL Notification Channel**: Implement `GenerateNotificationQuery()` function that returns a Golang struct containing the channel name to connect to
+- **MongoDB Operations**: Implement `GenerateQuery()` functions that return Golang structs containing collection name and database name
+- **Custom Data Pull/Push Hooks**: Write custom code within each connector entity to:
+  - Define data extraction logic from source databases
+  - Implement data insertion/update logic for destination databases
+  - Handle connection-specific operations and optimizations
 
-```bash
-cd my-website
-npm run start
-```
+`[PLACEHOLDER: Connector configuration screenshot]`
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
+### **Transformers**
+Custom transformation hooks that process data flowing through pipelines. Each transformer receives a struct containing:
+- **Record**: Data as `map[string]interface{}` 
+- **DB Connections**: Access to configured database connections
 
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
+**Function Requirements:**
+- Must return a record of type `map[string]interface{}`
+- Returned record becomes input for the next transformer in the pipeline
 
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+**Pipeline Processing:**
+- Multiple transformers can be chained in a pipeline
+- Transformers execute in sequential order
+- Output from previous transformer becomes input for next transformer
+- If a transformer returns `nil`, the current record is skipped and processing continues with the next record
+
+**Use Cases:**
+- Modify data structure and field mappings
+- Apply business logic and calculations
+- Validate data integrity and filter records
+- Enrich data using auxiliary database connections
+
+`[PLACEHOLDER: Transformer code editor screenshot]`
+
+### **User Library**
+Repository for user-defined utility and helper functions that can be reused across multiple pipelines and transformations.
+
+**Supported Components:**
+- **Constants**: Define reusable configuration values and business constants
+- **File I/O Handlers**: Custom functions for reading from and writing to various file formats
+- **Data Interpolation Methods**: Generic utilities for data processing and manipulation
+  - Nil checkers and validators
+  - Type casting and conversion functions
+  - Data formatting and standardization utilities
+- **Custom Helper Functions**: Any reusable business logic or utility functions
+
+**Workspace Access:**
+- All user libraries defined in the workspace are accessible during pipeline execution
+- Functions can be called from transformers, connectors, and other pipeline components
+- Promotes code reusability and maintains consistency across different pipelines
+
+**Benefits:**
+- Centralized code management for common operations
+- Reduced code duplication across pipelines
+- Easier maintenance and updates to shared functionality
+- Standardized data processing patterns across the workspace
+
+`[PLACEHOLDER: User Library interface screenshot]`
+
+### **Checkpoint & Recovery**
+
+#### **Checkpoints**
+Disaster recovery tracking hooks that run at pipeline stages to:
+- Store process state
+- Enable restart capabilities
+- Track execution progress
+
+#### **Backlog** 
+Error handling hooks that activate when data push operations fail:
+- Log failed operations
+- Queue retry attempts
+- Store failure details for analysis
+
+`[PLACEHOLDER: Checkpoint and Backlog monitoring dashboard screenshot]`
+
+### **Execution Components**
+
+#### **Pipelines**
+Define data flow relationships from source to destination entities:
