@@ -26,8 +26,6 @@ Central repository for all database connections example PostgreSQL, MongoDB, and
 - Destination databases  
 - Auxiliary databases
 
-`[PLACEHOLDER: Hub interface screenshot]`
-
 ## **Connectors**
 Bridge the gap between Hub connections and your database operations through a two-tier connector system:
 
@@ -52,8 +50,6 @@ Each connector entity contains multiple library-defined functions that provide c
   - Implement data insertion/update logic for destination databases
   - Handle connection-specific operations and optimizations
 
-`[PLACEHOLDER: Connector configuration screenshot]`
-
 ## **Transformers**
 Custom transformation hooks that process data flowing through pipelines. Each transformer receives a struct containing:
 - **Record**: Data as `map[string]interface{}` 
@@ -74,8 +70,6 @@ Custom transformation hooks that process data flowing through pipelines. Each tr
 - Apply business logic and calculations
 - Validate data integrity and filter records
 - Enrich data using auxiliary database connections
-
-`[PLACEHOLDER: Transformer code editor screenshot]`
 
 ## **User Library**
 Repository for user-defined utility and helper functions that can be reused across multiple pipelines and transformations.
@@ -99,8 +93,6 @@ Repository for user-defined utility and helper functions that can be reused acro
 - Reduced code duplication across pipelines
 - Easier maintenance and updates to shared functionality
 - Standardized data processing patterns across the workspace
-
-`[PLACEHOLDER: User Library interface screenshot]`
 
 ## **Pipeline Hooks**
 
@@ -146,5 +138,3 @@ A pipeline can implement a backlog hook that handles error scenarios during data
 - Queue failed records for later reprocessing
 
 **Example scenario:** If a database connection times out while inserting a batch of records, the backlog hook captures the last record and can be stored separately, allowing for retry attempts or manual intervention without losing data.
-
-`[PLACEHOLDER: Checkpoint and Backlog monitoring dashboard screenshot]`

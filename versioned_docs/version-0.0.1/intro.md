@@ -12,23 +12,21 @@ ETLFunnel is a developer-first ETL (Extract, Transform, Load) SaaS tool designed
 
 Our ETL tool operates on a three-tier architecture:
 
-- **Machine Layer**: Collections
+- **Database Layer**: Collections
 - **Schema Layer**: Flows  
 - **Entity Layer**: Pipelines
 
 ![Architecture overview diagram](/img/architecture.svg)
 
-## Component Definitions
+# Component Definitions
 
-### **Hub**
+## **Hub**
 Central repository for all database connections example PostgreSQL, MongoDB, and other systems. Stores connection parameters for:
 - Source databases
 - Destination databases  
 - Auxiliary databases
 
-`[PLACEHOLDER: Hub interface screenshot]`
-
-### **Connectors**
+## **Connectors**
 Bridge the gap between Hub connections and your database operations through a two-tier connector system:
 
 #### **SQL Connectors**
@@ -52,9 +50,7 @@ Each connector entity contains multiple library-defined functions that provide c
   - Implement data insertion/update logic for destination databases
   - Handle connection-specific operations and optimizations
 
-`[PLACEHOLDER: Connector configuration screenshot]`
-
-### **Transformers**
+## **Transformers**
 Custom transformation hooks that process data flowing through pipelines. Each transformer receives a struct containing:
 - **Record**: Data as `map[string]interface{}` 
 - **DB Connections**: Access to configured database connections
@@ -75,9 +71,7 @@ Custom transformation hooks that process data flowing through pipelines. Each tr
 - Validate data integrity and filter records
 - Enrich data using auxiliary database connections
 
-`[PLACEHOLDER: Transformer code editor screenshot]`
-
-### **User Library**
+## **User Library**
 Repository for user-defined utility and helper functions that can be reused across multiple pipelines and transformations.
 
 **Supported Components:**
@@ -100,11 +94,9 @@ Repository for user-defined utility and helper functions that can be reused acro
 - Easier maintenance and updates to shared functionality
 - Standardized data processing patterns across the workspace
 
-`[PLACEHOLDER: User Library interface screenshot]`
+## **Pipeline Hooks**
 
-### **Pipeline Hooks**
-
-#### **Checkpoint Hook**
+### **Checkpoint Hook**
 A pipeline can implement a checkpoint hook that provides disaster recovery and progress tracking capabilities. This hook is automatically invoked whenever the pipeline commits data, whether during bulk operations or individual record commits.
 
 **When it triggers:**
@@ -125,7 +117,7 @@ A pipeline can implement a checkpoint hook that provides disaster recovery and p
 
 ---
 
-#### **Backlog Hook**
+### **Backlog Hook**
 A pipeline can implement a backlog hook that handles error scenarios during data push operations to destinations. This hook activates when the pipeline encounters failures while attempting to write data.
 
 **When it triggers:**
@@ -146,5 +138,3 @@ A pipeline can implement a backlog hook that handles error scenarios during data
 - Queue failed records for later reprocessing
 
 **Example scenario:** If a database connection times out while inserting a batch of records, the backlog hook captures the last record and can be stored separately, allowing for retry attempts or manual intervention without losing data.
-
-`[PLACEHOLDER: Checkpoint and Backlog monitoring dashboard screenshot]`
