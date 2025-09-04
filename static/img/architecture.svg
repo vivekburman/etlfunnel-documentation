@@ -1,0 +1,139 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#1e293b">
+    ETLFunnel Three-Tier Architecture
+  </text>
+
+  <!-- Entity Layer -->
+  <g id="entity-layer">
+    <rect x="50" y="70" width="700" height="140" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="10"/>
+    <text x="60" y="95" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e40af">
+      Entity Layer: Pipelines
+    </text>
+
+    <!-- 3 Entities (resized) -->
+    <g>
+      <!-- Tables -->
+      <rect x="90" y="110" width="160" height="80" fill="#fbbf24" stroke="#d97706" stroke-width="1" rx="5"/>
+      <text x="170" y="130" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#92400e">Tables</text>
+      <line x1="100" y1="140" x2="240" y2="140" stroke="#92400e" stroke-width="1"/>
+      <text x="105" y="155" font-family="Arial, sans-serif" font-size="10" fill="#92400e">users</text>
+      <text x="105" y="170" font-family="Arial, sans-serif" font-size="10" fill="#92400e">orders</text>
+      <text x="105" y="185" font-family="Arial, sans-serif" font-size="10" fill="#92400e">products</text>
+
+      <!-- Collections -->
+      <rect x="320" y="110" width="160" height="80" fill="#34d399" stroke="#10b981" stroke-width="1" rx="5"/>
+      <text x="400" y="130" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#047857">Collections</text>
+      <line x1="330" y1="140" x2="470" y2="140" stroke="#047857" stroke-width="1"/>
+      <text x="335" y="155" font-family="Arial, sans-serif" font-size="10" fill="#047857">user_events</text>
+      <text x="335" y="170" font-family="Arial, sans-serif" font-size="10" fill="#047857">sessions</text>
+      <text x="335" y="185" font-family="Arial, sans-serif" font-size="10" fill="#047857">analytics</text>
+
+      <!-- Indices -->
+      <rect x="550" y="110" width="160" height="80" fill="#a78bfa" stroke="#8b5cf6" stroke-width="1" rx="5"/>
+      <text x="630" y="130" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#5b21b6">Indices</text>
+      <line x1="560" y1="140" x2="700" y2="140" stroke="#5b21b6" stroke-width="1"/>
+      <text x="565" y="155" font-family="Arial, sans-serif" font-size="10" fill="#5b21b6">user_id_idx</text>
+      <text x="565" y="170" font-family="Arial, sans-serif" font-size="10" fill="#5b21b6">time_idx</text>
+      <text x="565" y="185" font-family="Arial, sans-serif" font-size="10" fill="#5b21b6">geo_idx</text>
+    </g>
+  </g>
+
+  <!-- Schema Layer -->
+  <g id="schema-layer">
+    <rect x="50" y="250" width="700" height="140" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="10"/>
+    <text x="60" y="275" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#d97706">
+      Schema Layer: Flows
+    </text>
+
+    <!-- 3 Schemas -->
+    <g>
+      <!-- PostgreSQL -->
+      <rect x="90" y="290" width="160" height="80" fill="#e0e7ff" stroke="#6366f1" stroke-width="1" rx="5"/>
+      <text x="170" y="310" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#4338ca">PostgreSQL</text>
+      <text x="170" y="325" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#4338ca">Schema</text>
+      <line x1="100" y1="330" x2="240" y2="330" stroke="#4338ca" stroke-width="1"/>
+      <text x="105" y="345" font-family="Arial, sans-serif" font-size="9" fill="#4338ca">public</text>
+      <text x="105" y="355" font-family="Arial, sans-serif" font-size="9" fill="#4338ca">analytics</text>
+      <text x="105" y="365" font-family="Arial, sans-serif" font-size="9" fill="#4338ca">reporting</text>
+
+      <!-- MongoDB -->
+      <rect x="320" y="290" width="160" height="80" fill="#d1fae5" stroke="#10b981" stroke-width="1" rx="5"/>
+      <text x="400" y="310" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#047857">MongoDB</text>
+      <text x="400" y="325" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#047857">Database</text>
+      <line x1="330" y1="330" x2="470" y2="330" stroke="#047857" stroke-width="1"/>
+      <text x="335" y="345" font-family="Arial, sans-serif" font-size="9" fill="#047857">user_data</text>
+      <text x="335" y="355" font-family="Arial, sans-serif" font-size="9" fill="#047857">events</text>
+      <text x="335" y="365" font-family="Arial, sans-serif" font-size="9" fill="#047857">logs</text>
+
+      <!-- Elasticsearch -->
+      <rect x="550" y="290" width="160" height="80" fill="#fde68a" stroke="#f59e0b" stroke-width="1" rx="5"/>
+      <text x="630" y="310" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#d97706">Elasticsearch</text>
+      <text x="630" y="325" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d97706">Index Pattern</text>
+      <line x1="560" y1="330" x2="700" y2="330" stroke="#d97706" stroke-width="1"/>
+      <text x="565" y="345" font-family="Arial, sans-serif" font-size="9" fill="#d97706">logs-*</text>
+      <text x="565" y="355" font-family="Arial, sans-serif" font-size="9" fill="#d97706">metrics-*</text>
+      <text x="565" y="365" font-family="Arial, sans-serif" font-size="9" fill="#d97706">events-*</text>
+    </g>
+  </g>
+
+  <!-- Machine Layer -->
+  <g id="machine-layer">
+    <rect x="50" y="430" width="700" height="140" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2" rx="10"/>
+    <text x="60" y="455" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#7c3aed">
+      Database Layer: Collections
+    </text>
+
+    <!-- 3 Machines -->
+    <g>
+      <!-- PostgreSQL Server -->
+      <rect x="90" y="470" width="160" height="80" fill="#1f2937" stroke="#374151" stroke-width="1" rx="5"/>
+      <rect x="100" y="480" width="140" height="8" fill="#10b981" rx="2"/>
+      <text x="170" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e5e7eb">DB Server 1</text>
+      <text x="170" y="515" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">PostgreSQL</text>
+      <text x="170" y="530" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">192.168.1.10</text>
+
+      <!-- MongoDB Server -->
+      <rect x="320" y="470" width="160" height="80" fill="#1f2937" stroke="#374151" stroke-width="1" rx="5"/>
+      <rect x="330" y="480" width="140" height="8" fill="#10b981" rx="2"/>
+      <text x="400" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e5e7eb">DB Server 2</text>
+      <text x="400" y="515" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">MongoDB</text>
+      <text x="400" y="530" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">192.168.1.11</text>
+
+      <!-- Elasticsearch Cluster -->
+      <rect x="550" y="470" width="160" height="80" fill="#1f2937" stroke="#374151" stroke-width="1" rx="5"/>
+      <rect x="560" y="480" width="140" height="8" fill="#10b981" rx="2"/>
+      <text x="630" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#e5e7eb">Search Cluster</text>
+      <text x="630" y="515" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">Elasticsearch</text>
+      <text x="630" y="530" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#d1d5db">192.168.1.12</text>
+    </g>
+  </g>
+
+  <!-- Connection arrows -->
+  <g id="connections">
+    <!-- Entity to Schema -->
+    <path d="M 170 210 Q 170 230 170 250" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 400 210 Q 400 230 400 250" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 630 210 Q 630 230 630 250" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+    <!-- Schema to Machine -->
+    <path d="M 170 390 Q 170 410 170 430" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 400 390 Q 400 410 400 430" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    <path d="M 630 390 Q 630 410 630 430" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  </g>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Legend -->
+  <text x="60" y="590" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#374151">
+    Data Flow: Machine → Schema → Entity (Collections → Flows → Pipelines)
+  </text>
+</svg>
