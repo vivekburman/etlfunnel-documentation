@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # Setup Guide
 
 This guide will walk you through the complete setup process for ETLFunnel, including configuration, and runner deployment.

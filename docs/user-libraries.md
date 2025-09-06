@@ -1,7 +1,3 @@
----
-sidebar_position: 7
----
-
 # User Libraries
 
 User Libraries allow you to create reusable helper functions, utility operations, and global constants that can be shared across your ETL pipelines. This promotes code reusability and maintains consistency in your data processing workflows.

@@ -1,7 +1,3 @@
----
-sidebar_position: 3
----
-
 # Connector Hub
 
 The Connector Hub is the centralized management system for all database connections in your ETL pipeline. It serves as the foundation for both source and destination connections, supporting a wide range of database systems with flexible data processing strategies.

@@ -1,7 +1,3 @@
----
-sidebar_position: 8
----
-
 # Flows
 
 A **Flow** represents the logical unit of work in your ETL operations. Think of it as a dedicated workspace where all related data pipelines share the same source and destination database connections, similar to how a schema organizes tables in a PostgreSQL database.

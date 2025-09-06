@@ -1,7 +1,3 @@
----
-sidebar_position: 11
----
-
 # Creating a New Build
 
 To create a new ETL build, navigate to the builds section and click **Create New**. You'll be presented with several configuration tabs that need to be properly set up.

@@ -1,7 +1,3 @@
----
-sidebar_position: 4
----
-
 # Transformer Hook
 
 Transformers are the core processing units in ETL pipelines that modify, enrich, or filter data records as they flow from source to destination. They provide the "T" (Transform) in your ETL workflow, allowing you to implement custom business logic for data processing.

@@ -1,7 +1,3 @@
----
-sidebar_position: 5
----
-
 # Checkpoint Hook
 
 Checkpoint hooks are triggered automatically by the pipeline whenever data is committed to the destination. These hooks provide a powerful mechanism to track data lineage, maintain audit logs, and perform post-commit operations across your ETL workflow.

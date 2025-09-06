@@ -1,7 +1,3 @@
----
-sidebar_position: 6
----
-
 # Backlog Hook
 
 Backlog hooks are triggered when write operations to the destination fail, providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
