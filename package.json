@@ -5,7 +5,9 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start --port 2233",
-    "build": "docusaurus build",
+    "build:dev": "cross-env NODE_ENV=development docusaurus build",
+    "build:prod": "cross-env NODE_ENV=production docusaurus build",
+    "serve:prod": "cross-env NODE_ENV=production docusaurus build && docusaurus serve --port 2233",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -27,6 +29,7 @@
     "@docusaurus/module-type-aliases": "3.8.1",
     "@docusaurus/tsconfig": "3.8.1",
     "@docusaurus/types": "3.8.1",
+    "cross-env": "^10.0.0",
     "typescript": "~5.6.2"
   },
   "browserslist": {

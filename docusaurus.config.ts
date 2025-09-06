@@ -3,7 +3,7 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
-
+const isProd = process.env.NODE_ENV === 'production';
 const config: Config = {
 	title: 'ETLFunnel Documentation',
 	tagline: 'Dev-First ETL Tool',
@@ -15,10 +15,10 @@ const config: Config = {
 	},
 
 	// Set the production url of your site here
-	url: 'https://your-docusaurus-site.example.com',
+	url: 'https://etlfunnel.com',
 	// Set the /<baseUrl>/ pathname under which your site is served
 	// For GitHub pages deployment, it is often '/<projectName>/'
-	baseUrl: '/',
+	baseUrl: isProd ? '/docs' : '/',
 
 	// GitHub pages deployment config.
 	// If you aren't using GitHub pages, you don't need these.
@@ -41,6 +41,7 @@ const config: Config = {
 			'classic',
 			{
 				docs: {
+					routeBasePath: "/",
 					lastVersion: "current",
 					sidebarPath: './sidebars.ts',
 					// Please change this to your repo.
@@ -81,8 +82,9 @@ const config: Config = {
 		navbar: {
 			title: 'ETLFunnel',
 			logo: {
-				alt: 'My Site Logo',
+				alt: 'ETLFunnel',
 				src: 'img/logo.svg',
+				href: "https://etlfunnel.com"
 			},
 			items: [
 				{
@@ -105,38 +107,8 @@ const config: Config = {
 						},
 					],
 				},
-				{
-					title: 'Community',
-					items: [
-						{
-							label: 'Stack Overflow',
-							href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-						},
-						{
-							label: 'Discord',
-							href: 'https://discordapp.com/invite/docusaurus',
-						},
-						{
-							label: 'X',
-							href: 'https://x.com/docusaurus',
-						},
-					],
-				},
-				{
-					title: 'More',
-					items: [
-						{
-							label: 'Blog',
-							to: '/blog',
-						},
-						{
-							label: 'GitHub',
-							href: 'https://github.com/facebook/docusaurus',
-						},
-					],
-				},
 			],
-			copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+			copyright: `Copyright © ${new Date().getFullYear()} ETLFunnel, Inc. Built with Docusaurus.`,
 		},
 		prism: {
 			theme: prismThemes.github,
