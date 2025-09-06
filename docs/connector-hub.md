@@ -1,3 +1,7 @@
+---
+sidebar_position: 3
+---
+
 # Connector Hub
 
 The Connector Hub is the centralized management system for all database connections in your ETL pipeline. It serves as the foundation for both source and destination connections, supporting a wide range of database systems with flexible data processing strategies.
@@ -165,7 +169,7 @@ Redis connector enables integration with Redis key-value stores, supporting vari
 | Data Processing Strategy | Dropdown | By Keys | Method for data retrieval |
 
 **Data Processing Strategies:**
-- **By Keys**: Execute Redis commands to fetch data at scheduled intervals. One-time operation with all matching keys processed.
+- **By Keys**: Fetch data for all specified keys and pattern matches.
 - **By Streams**: Redis Streams for real-time data processing
 - **By Keyspace**: Keyspace notifications for change detection
 - **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
@@ -193,7 +197,7 @@ MongoDB connector provides comprehensive integration with MongoDB databases, sup
 | Data Processing Strategy | Dropdown | By Query | Method for data retrieval |
 
 **Data Processing Strategies:**
-- **By Query**: Execute MongoDB queries to fetch data at scheduled intervals. One-time query execution with all matching documents processed.
+- **By Query**: Execute MongoDB query to fetch data for matching documents
 - **By Streams**: Change Streams for real-time monitoring
 - **By Oplog Trailing**: Operation log tailing for change detection
 - **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
@@ -208,7 +212,7 @@ Change Streams require a replica set or sharded cluster configuration. For stand
 ### Creating a New Connection
 
 1. Navigate to the Connector Hub in your ETL platform
-2. Select "Add New Connection"
+2. Select "Create New"
 3. Choose your database type from the supported connectors
 4. Fill in the required configuration parameters
 5. Select the appropriate data processing strategy
