@@ -23,7 +23,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Connectors',
-      items: ['connector-hub'],
+      items: ['connector-hub', 'connector-entity'],
     },
     {
       type: "category",
