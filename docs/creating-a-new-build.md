@@ -17,19 +17,13 @@ Select the execution type for your build:
 ## Execution Settings
 
 ### Runner
-Select the execution environment for your build:
-- **dsx**: Use the DSX (Data Science Experience) runtime environment
+Select the remote runner machine environment for your build to be executed on
 
 ### Schedule Options
 Configure when your ETL build should run:
 
 - **Run now**: Execute the build immediately upon creation
-- **Recurring (UTC Time)**: Set up automated recurring executions
-- **Schedule (UTC Time)**: Schedule for a specific date and time
-
-:::tip
-All scheduling uses UTC time. Make sure to convert your local time to UTC when scheduling builds.
-:::
+- **Cron Job**: Set up automated recurring executions
 
 ## Logging Configuration
 
