@@ -18,7 +18,8 @@ const config: Config = {
 	url: 'https://etlfunnel.com',
 	// Set the /<baseUrl>/ pathname under which your site is served
 	// For GitHub pages deployment, it is often '/<projectName>/'
-	baseUrl: isProd ? '/docs' : '/',
+	baseUrl: isProd ? '/docs/' : '/',
+	trailingSlash: false,
 
 	// GitHub pages deployment config.
 	// If you aren't using GitHub pages, you don't need these.
@@ -70,12 +71,11 @@ const config: Config = {
 			} satisfies Preset.Options,
 		],
 	],
-
 	themeConfig: {
 		colorMode: {
 			defaultMode: 'dark',
-      		disableSwitch: false,
-      		respectPrefersColorScheme: false,
+			disableSwitch: false,
+			respectPrefersColorScheme: false,
 		},
 		// Replace with your project's social card
 		image: 'img/docusaurus-social-card.jpg',
@@ -94,21 +94,6 @@ const config: Config = {
 					label: 'Tutorial',
 				},
 			],
-		},
-		footer: {
-			style: 'dark',
-			links: [
-				{
-					title: 'Docs',
-					items: [
-						{
-							label: 'Tutorial',
-							to: '/docs/intro',
-						},
-					],
-				},
-			],
-			copyright: `Copyright © ${new Date().getFullYear()} ETLFunnel, Inc. Built with Docusaurus.`,
 		},
 		prism: {
 			theme: prismThemes.github,
