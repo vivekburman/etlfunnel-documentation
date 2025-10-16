@@ -1,4 +1,4 @@
-# Backlog Hook
+# Incident Backlog
 
 Backlog hooks are triggered when write operations to the destination fail, providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
 
@@ -48,14 +48,12 @@ import (
 )
 
 func Backlog(param *models.IBacklogParam) {
-    logger.Pipeline(param.Ctx).Error("Write failure detected", 
-        zap.String("pipeline", param.PipelineName),
-        zap.Any("record_id", param.Record["id"]))
+    param.Logger.Error("Write failure detected", zap.Any("record_id", param.Record["id"]))
     
     // Cast auxiliary database connection
     mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
     if err != nil {
-        logger.Pipeline(param.Ctx).Error("Failed to cast MySQL connection", zap.Error(err))
+        param.Logger.Error("Failed to cast MySQL connection", zap.Error(err))
         return
     }
     
@@ -69,23 +67,23 @@ func Backlog(param *models.IBacklogParam) {
     `
     
     _, err = mysqlConn.Exec(query,
-        param.PipelineName,
+        param.Ctx.GetName(),
         param.Record["id"],
         string(recordJSON),
         time.Now().UTC(),
     )
     
     if err != nil {
-        logger.Pipeline(param.Ctx).Error("Failed to store backlog record", zap.Error(err))
+        param.Logger.Error("Failed to store backlog record", zap.Error(err))
         return
     }
     
     // Update failure statistics
-    updateFailureStats(mysqlConn, param.PipelineName)
+    updateFailureStats(mysqlConn, param.Ctx.GetName())
     
     // Send alert for critical records
     if isCriticalRecord(param.Record) {
-        sendFailureAlert(param.Ctx, param.Record, param.PipelineName)
+        sendFailureAlert(param.Ctx, param.Record, param.Ctx.GetName())
     }
 }
 
@@ -110,9 +108,7 @@ func isCriticalRecord(record map[string]any) bool {
 }
 
 func sendFailureAlert(ctx context.Context, record map[string]any, pipeline string) {
-    logger.Pipeline(ctx).Error("Critical record failure alert", 
-        zap.String("pipeline", pipeline),
-        zap.Any("record", record))
+    param.Logger.Error("Critical record failure alert"zap.String("pipeline", pipeline), zap.Any("record", record))
     // Integration with alerting systems (Slack, PagerDuty, etc.)
 }
 ```

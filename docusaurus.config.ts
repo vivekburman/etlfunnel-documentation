@@ -72,6 +72,11 @@ const config: Config = {
 		],
 	],
 	themeConfig: {
+		docs: {
+			sidebar: {
+				autoCollapseCategories: false,
+			}
+		},
 		colorMode: {
 			defaultMode: 'dark',
 			disableSwitch: false,

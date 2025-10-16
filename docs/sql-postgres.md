@@ -98,8 +98,7 @@ func (c *IUseConnector) FetchRecords(param *PostgresSourceFetch) <-chan map[stri
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query(context.Background(), 
-            "SELECT id, name FROM " + param.PipelineName + " LIMIT 5")
+        rows, err := param.SourceDBConn.Query(context.Background()    "SELECT id, name FROM " + param.Ctx.GetName() + " LIMIT 5")
         if err != nil {
             log.Println("query error:", err)
             return
@@ -125,20 +124,20 @@ func (c *IUseConnector) FetchRecords(param *PostgresSourceFetch) <-chan map[stri
 }
 
 func (c *IUseConnector) GenerateQuery(param *PostgresSourceQuery) (*PostgresSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.PipelineName)
+    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.Ctx.GetName())
     return &PostgresSourceQueryTune{Query: query}, nil
 }
 
 func (c *IUseConnector) GenerateNotification(param *PostgresSourceNotification) (*PostgresSourceNotificationTune, error) {
-    channelName := fmt.Sprintf("%s_changes", param.PipelineName)
+    channelName := fmt.Sprintf("%s_changes", param.Ctx.GetName())
     return &PostgresSourceNotificationTune{
         ChannelName: channelName,
     }, nil
 }
 
 func (c *IUseConnector) GenerateWAL(param *PostgresSourceWAL) (*PostgresSourceWALTune, error) {
-    slotName := fmt.Sprintf("%s_slot", param.PipelineName)
-    publicationName := fmt.Sprintf("%s_pub", param.PipelineName)
+    slotName := fmt.Sprintf("%s_slot", param.Ctx.GetName())
+    publicationName := fmt.Sprintf("%s_pub", param.Ctx.GetName())
 
     return &PostgresSourceWALTune{
         SlotName:        slotName,
@@ -223,7 +222,7 @@ func (c *IUseConnector) GenerateQuery(param *models.PostgresDestQuery) (*models.
 
     query := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s) 
         ON CONFLICT (id) DO UPDATE SET %s`,
-        param.PipelineName, columns, values, placeholders)
+        param.Ctx.GetName(), columns, values, placeholders)
 
     return &models.PostgresDestQueryTune{
         Query:           query,

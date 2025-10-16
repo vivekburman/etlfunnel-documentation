@@ -1,4 +1,4 @@
-# Checkpoint Hook
+# Save Checkpoint
 
 Checkpoint hooks are triggered automatically by the pipeline whenever data is committed to the destination. These hooks provide a powerful mechanism to track data lineage, maintain audit logs, and perform post-commit operations across your ETL workflow.
 
@@ -51,20 +51,18 @@ import (
 )
 
 func Checkpoint(param *models.ICheckpointParam) {
-    logger.Pipeline(param.Ctx).Info("Checkpoint triggered", 
-        zap.String("pipeline", param.PipelineName),
-        zap.Any("record_id", param.Record["id"]))
+    param.Logger.Info("Checkpoint triggered", zap.Any("record_id", param.Record["id"]))
     
     // Cast auxiliary database connection
     mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
     if err != nil {
-        logger.Pipeline(param.Ctx).Error("Failed to cast MySQL connection", zap.Error(err))
+        param.Logger.Error("Failed to cast MySQL connection", zap.Error(err))
         return
     }
     
     // Create audit log entry
     auditEntry := map[string]interface{}{
-        "pipeline_name":    param.PipelineName,
+        "pipeline_name":    param.Ctx.GetName(),
         "record_id":        param.Record["id"],
         "commit_timestamp": time.Now().UTC(),
         "record_data":      param.Record,
@@ -92,12 +90,12 @@ func Checkpoint(param *models.ICheckpointParam) {
     )
     
     if err != nil {
-        logger.Pipeline(param.Ctx).Error("Failed to write audit log", zap.Error(err))
+        param.Logger.Error("Failed to write audit log", zap.Error(err))
         return
     }
     
     // Update pipeline statistics
-    updatePipelineStats(mysqlConn, param.PipelineName)
+    updatePipelineStats(mysqlConn, param.Ctx.GetName())
     
     // Trigger downstream notifications if needed
     if shouldTriggerNotification(param.Record) {
@@ -127,8 +125,7 @@ func shouldTriggerNotification(record map[string]any) bool {
 
 func sendDownstreamNotification(ctx context.Context, record map[string]any) {
     // Implementation for external notifications
-    logger.Pipeline(ctx).Info("Triggering downstream notification", 
-        zap.Any("record", record))
+    param.Logger.Info("Triggering downstream notification", zap.Any("record", record))
 }
 ```
 

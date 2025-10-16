@@ -16,26 +16,31 @@ const sidebars: SidebarsConfig = {
     // Manual sidebar configuration with your specified sections
     tutorialSidebar: [
         {
+            collapsed: false,
             type: 'category',
             label: 'Getting Started',
             items: ['intro', 'setup-guide'],
         },
         {
+            collapsed: false,
             type: 'category',
             label: 'Connectors',
             items: ['connector-hub', 'connector-entity'],
         },
         {
+            collapsed: false,
             type: "category",
             label: "Hooks",
             items: ['transformer-hook', 'checkpoint-hook', 'backlog-hook']
         },
         {
+            collapsed: false,
             type: 'category',
             label: 'Resources',
             items: ['resource-flow', 'resource-collection', 'user-libraries'],
         },
         {
+            collapsed: false,
             type: "category",
             label: "Executions",
             items: ['creating-a-new-build', 'integration-webhook']
@@ -45,6 +50,7 @@ const sidebars: SidebarsConfig = {
             label: "Code References",
             items: [
                 {
+                    collapsed: false,
                     type: 'category',
                     label: 'Relational DB',
                     items: [
@@ -56,6 +62,7 @@ const sidebars: SidebarsConfig = {
                     ],
                 },
                 {
+                    collapsed: false,
                     type: 'category',
                     label: 'Non-Relational DB',
                     items: [
