@@ -24,8 +24,8 @@ The `ICheckpointParam` struct provides access to:
 
 ```go
 type ICheckpointParam struct {
-    Ctx           context.Context                    // Request context for logging and operations
-    PipelineName  string                            // Current pipeline identifier
+    Ctx           IPipelineContextContract          // Request context for logging and operations
+	Logger        ILoggerContract                   // Logger for logging any message
     Record        map[string]any                    // Committed data record
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection

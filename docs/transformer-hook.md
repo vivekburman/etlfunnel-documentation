@@ -28,8 +28,8 @@ The `ITransformerParam` struct provides access to:
 
 ```go
 type ITransformerParam struct {
-    Ctx           context.Context                    // Request context for logging and cancellation
-    PipelineName  string                            // Current pipeline identifier
+    Ctx           IPipelineContextContract          // Pipeline context
+	Logger        ILoggerContract                   // Logger for logging any message
     Record        map[string]any                    // Input data record to transform
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection
