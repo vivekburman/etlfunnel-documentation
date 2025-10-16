@@ -37,7 +37,7 @@ const sidebars: SidebarsConfig = {
             collapsed: false,
             type: 'category',
             label: 'Resources',
-            items: ['resource-flow', 'resource-collection', 'user-libraries'],
+            items: ['resource-flow', 'resource-collection', 'resource-orchestrator', 'user-libraries'],
         },
         {
             collapsed: false,

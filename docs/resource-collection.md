@@ -3,6 +3,7 @@
 A **Collection** operates at the database layer and represents a grouping of homogeneous **Flows** that share the same source and destination database types. Collections enable you to manage ETL operations across multiple logical layers (Flows) of a database simultaneously.
 
 ## Collection Architecture
+<img src="/img/page_resource/collection.png" alt="Collection" height="300" /><br/><br/><br/>
 
 ```
 PostgreSQL Database
