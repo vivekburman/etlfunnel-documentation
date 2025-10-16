@@ -73,7 +73,7 @@ func (c *IUseConnector) FetchRecords(param *MariaSourceFetch) <-chan map[string]
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.PipelineName + " LIMIT 5")
+        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.Ctx.GetName() + " LIMIT 5")
         if err != nil {
             log.Println("query error:", err)
             return
@@ -107,7 +107,7 @@ func (c *IUseConnector) FetchRecords(param *MariaSourceFetch) <-chan map[string]
 }
 
 func (c *IUseConnector) GenerateQuery(param *MariaSourceQuery) (*MariaSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.PipelineName)
+    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.Ctx.GetName())
     return &MariaSourceQueryTune{Query: query}, nil
 }
 
@@ -188,7 +188,7 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) (*models.Mar
     }
 
     query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-        param.PipelineName, columns, values)
+        param.Ctx.GetName(), columns, values)
 
     return &models.MariaDestQueryTune{
         Query:           query,

@@ -90,7 +90,7 @@ func (c *IUseConnector) FetchRecords(param *MongoSourceFetch) <-chan map[string]
     go func() {
         defer close(ch)
 
-        collection := param.SourceDBConn.Database("etl").Collection(param.PipelineName)
+        collection := param.SourceDBConn.Database("etl").Collection(param.Ctx.GetName())
         cursor, err := collection.Find(context.TODO(), bson.M{}, options.Find().SetLimit(5))
         if err != nil {
             log.Println("find error:", err)
@@ -141,7 +141,7 @@ func (c *IUseConnector) GenerateOplogTrailing(param *MongoSourceOplog) (*MongoSo
     // Configure oplog tailing with timestamp filter
     filter := bson.M{
         "ts": bson.M{"$gte": time.Now().Add(-1 * time.Hour)},
-        "ns": bson.M{"$regex": "^etl\\." + param.PipelineName},
+        "ns": bson.M{"$regex": "^etl\\." + param.Ctx.GetName()},
     }
     
     options := options.Find().

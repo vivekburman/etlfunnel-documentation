@@ -84,7 +84,7 @@ func (c *IUseConnector) FetchRecords(param *ElasticSourceFetch) <-chan map[strin
         
         body, _ := json.Marshal(searchQuery)
         res, err := param.SourceDBConn.Search(
-            param.SourceDBConn.Search.WithIndex(param.PipelineName),
+            param.SourceDBConn.Search.WithIndex(param.Ctx.GetName()),
             param.SourceDBConn.Search.WithBody(bytes.NewReader(body)),
             param.SourceDBConn.Search.WithScroll(time.Minute),
         )
@@ -150,7 +150,7 @@ func (c *IUseConnector) GenerateQuery(param *ElasticSourceQuery) (*ElasticQueryT
     
     return &ElasticQueryTune{
         QueryType:     ElasticsearchQueryTypeSearch,
-        Index:         param.PipelineName,
+        Index:         param.Ctx.GetName(),
         Body:          query,
         ScrollTimeout: time.Minute,
     }, nil
@@ -244,7 +244,7 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) (*models.E
     }
     
     return &models.ElasticDestQueryTune{
-        Index:           param.PipelineName,
+        Index:           param.Ctx.GetName(),
         DocID:           docID,
         Operation:       ElasticWriteOperationTypeIndex,
         Document:        document,

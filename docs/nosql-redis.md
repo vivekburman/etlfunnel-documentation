@@ -97,7 +97,7 @@ func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.Red
 
 func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsTune, error) {
     return &models.RedisSourceStreamsTune{
-        StreamNames:     []string{param.PipelineName + ":events"},
+        StreamNames:     []string{param.Ctx.GetName() + ":events"},
         ConsumerGroup:   "etl-group",
         ConsumerName:    "etl-consumer-1",
         SpecificStartId: "0",
@@ -126,7 +126,7 @@ func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan map[
         ctx := context.Background()
 
         // Scan for keys matching pattern
-        iter := param.SourceDBConn.Scan(ctx, 0, param.PipelineName+":*", 100).Iterator()
+        iter := param.SourceDBConn.Scan(ctx, 0, param.Ctx.GetName()+":*", 100).Iterator()
         for iter.Next(ctx) {
             key := iter.Val()
             val, err := param.SourceDBConn.Get(ctx, key).Result()
@@ -208,7 +208,7 @@ This structure manages:
 func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) (*models.RedisDestQueryTune, error) {
     // Determine operation based on record structure
     operation := "SET"
-    key := fmt.Sprintf("%s:%v", param.PipelineName, param.Record["id"])
+    key := fmt.Sprintf("%s:%v", param.Ctx.GetName(), param.Record["id"])
     value := param.Record["data"]
     expiration := time.Duration(0)
 

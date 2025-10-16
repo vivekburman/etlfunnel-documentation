@@ -1,4 +1,4 @@
-# Transformer Hook
+# Transformer
 
 Transformers are the core processing units in ETL pipelines that modify, enrich, or filter data records as they flow from source to destination. They provide the "T" (Transform) in your ETL workflow, allowing you to implement custom business logic for data processing.
 
@@ -19,17 +19,17 @@ When building transformers, consider these approaches for optimal reusability:
 Your transformer function must implement the following signature:
 
 ```go
-func Transformer(param *models.ITransformerParam) (map[string]interface{}, error)
+func Transformer(param *models.ITransformerProps) (map[string]interface{}, error)
 ```
 
 ### Parameters
 
-The `ITransformerParam` struct provides access to:
+The `ITransformerProps` struct provides access to:
 
 ```go
-type ITransformerParam struct {
-    Ctx           context.Context                    // Request context for logging and cancellation
-    PipelineName  string                            // Current pipeline identifier
+type ITransformerProps struct {
+    Ctx           IPipelineContextContract          // Pipeline context
+	Logger        ILoggerContract                   // Logger for logging any message
     Record        map[string]any                    // Input data record to transform
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection
@@ -46,15 +46,13 @@ type ITransformerParam struct {
 ## Implementation Example
 
 ```go
-func Transformer(param *models.ITransformerParam) (map[string]interface{}, error) {
-    logger.Pipeline(param.Ctx).Info("Processing customer record", 
-        zap.String("pipeline", param.PipelineName),
-        zap.Any("record_id", param.Record["id"]))
+func Transformer(param *models.ITransformerProps) (map[string]interface{}, error) {
+    param.Logger.Info("Processing customer record", zap.Any("record_id", param.Record["id"]))
     
     // Skip records without required fields
     email, exists := param.Record["email"]
     if !exists || email == "" {
-        logger.Pipeline(param.Ctx).Warn("Skipping record: missing email")
+        param.Logger.Warn("Skipping record: missing email")
         return nil, nil
     }
     
@@ -64,7 +62,7 @@ func Transformer(param *models.ITransformerParam) (map[string]interface{}, error
         "email":          strings.ToLower(email.(string)),
         "full_name":      fmt.Sprintf("%s %s", param.Record["first_name"], param.Record["last_name"]),
         "created_at":     time.Now().UTC(),
-        "pipeline_source": param.PipelineName,
+        "pipeline_source": param.Ctx.GetName(),
     }
     
     // Add computed fields

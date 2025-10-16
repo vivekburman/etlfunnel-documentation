@@ -100,7 +100,7 @@ func (c *IUseConnector) FetchRecords(param *MicrosoftServerSourceFetch) <-chan m
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.PipelineName + " LIMIT 5")
+        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.Ctx.GetName() + " LIMIT 5")
         if err != nil {
             log.Println("query error:", err)
             return
@@ -132,7 +132,7 @@ func (c *IUseConnector) FetchRecords(param *MicrosoftServerSourceFetch) <-chan m
 }
 
 func (c *IUseConnector) GenerateQuery(param *MicrosoftServerSourceQuery) (*MicrosoftServerSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT TOP 10 * FROM %s", param.PipelineName)
+    query := fmt.Sprintf("SELECT TOP 10 * FROM %s", param.Ctx.GetName())
     return &MicrosoftServerSourceQueryTune{Query: query}, nil
 }
 
@@ -149,14 +149,14 @@ func (c *IUseConnector) GenerateCDC(param *MicrosoftServerSourceCDC) (*Microsoft
         EndTime:      endTime,
         UseMinMaxLSN: true, // Use sys.fn_cdc_get_min_lsn and sys.fn_cdc_get_max_lsn
         QueryType:    models.MicrosoftServerCDCTypeAllChanges,
-        InstanceName: fmt.Sprintf("dbo_%s", param.PipelineName), // Capture instance name format: schema_tablename
+        InstanceName: fmt.Sprintf("dbo_%s", param.Ctx.GetName()), // Capture instance name format: schema_tablename
         RowFilter:    "", // Additional WHERE clause if needed
     }, nil
 }
 
 func (c *IUseConnector) GenerateServiceBroker(param *MicrosoftServerSourceServiceBroker) (*MicrosoftServerServiceBrokerTune, error) {
     return &MicrosoftServerServiceBrokerTune{
-        QueueName:  param.PipelineName + "_queue",
+        QueueName:  param.Ctx.GetName() + "_queue",
         SchemaName: "dbo",
         Timeout:    30000, // 30 seconds
     }, nil
@@ -231,7 +231,7 @@ func (c *IUseConnector) GenerateQuery(param *models.MicrosoftServerDestQuery) (*
     }
 
     query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-        param.PipelineName, columns, values)
+        param.Ctx.GetName(), columns, values)
 
     return &models.MicrosoftServerDestQueryTune{
         Query:           query,

@@ -91,7 +91,7 @@ func (c *IUseConnector) FetchRecords(param *OracleSourceFetch) <-chan map[string
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.PipelineName + " WHERE ROWNUM <= 5")
+        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.Ctx.GetName() + " WHERE ROWNUM <= 5")
         if err != nil {
             log.Println("query error:", err)
             return
@@ -123,7 +123,7 @@ func (c *IUseConnector) FetchRecords(param *OracleSourceFetch) <-chan map[string
 }
 
 func (c *IUseConnector) GenerateQuery(param *OracleSourceQuery) (*OracleSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.PipelineName)
+    query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.Ctx.GetName())
     return &OracleSourceQueryTune{
         Query:           query,
         RecordsPerBatch: 1000,
@@ -133,7 +133,7 @@ func (c *IUseConnector) GenerateQuery(param *OracleSourceQuery) (*OracleSourceQu
 
 func (c *IUseConnector) GenerateCDC(param *OracleSourceCDC) (*OracleSourceCDCTune, error) {
     return &OracleSourceCDCTune{
-        SourceTables:           []string{param.PipelineName},
+        SourceTables:           []string{param.Ctx.GetName()},
         SCNType:                "CURRENT",
         ExtractionMode:         "HOTLOG",
         IncludeOperations:      []string{"INSERT", "UPDATE", "DELETE"},
@@ -217,7 +217,7 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) (*models.Or
     }
 
     query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-        param.PipelineName, columns, values)
+        param.Ctx.GetName(), columns, values)
 
     return &models.OracleDestQueryTune{
         Query:           query,
