@@ -15,21 +15,32 @@ The commit behavior depends on your destination connector configuration:
 Your checkpoint function must implement the following signature:
 
 ```go
-func Checkpoint(param *models.ICheckpointParam)
+func Checkpoint(param *models.ICheckpointProps) (*models.CheckpointTune, error)
 ```
 
 ### Parameters
 
-The `ICheckpointParam` struct provides access to:
+The `ICheckpointProps` struct provides access to:
 
 ```go
-type ICheckpointParam struct {
+type PipelineAction int
+
+const (
+	ActionContinue PipelineAction = iota
+	ActionStop
+)
+
+type ICheckpointProps struct {
     Ctx           IPipelineContextContract          // Request context for logging and operations
-	Logger        ILoggerContract                   // Logger for logging any message
+    Logger        ILoggerContract                   // Logger for logging any message
     Record        map[string]any                    // Committed data record
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection
     AuxilaryDB    map[string]IDatabaseEngine        // Additional database connections
+}
+
+type CheckpointTune struct {
+	Action PipelineAction
 }
 ```
 
@@ -44,63 +55,59 @@ type ICheckpointParam struct {
 
 ```go
 import (
-    "streamcraft/execution/models"
-    "streamcraft/database/cast"
+    "etlfunnel/execution/models"
+    "etlfunnel/database/cast"
     "encoding/json"
     "time"
 )
 
-func Checkpoint(param *models.ICheckpointParam) {
-    param.Logger.Info("Checkpoint triggered", zap.Any("record_id", param.Record["id"]))
-    
-    // Cast auxiliary database connection
-    mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
-    if err != nil {
-        param.Logger.Error("Failed to cast MySQL connection", zap.Error(err))
-        return
-    }
-    
-    // Create audit log entry
-    auditEntry := map[string]interface{}{
-        "pipeline_name":    param.Ctx.GetName(),
-        "record_id":        param.Record["id"],
-        "commit_timestamp": time.Now().UTC(),
-        "record_data":      param.Record,
-        "source_table":     param.Record["_source_table"],
-        "destination_table": param.Record["_destination_table"],
-        "processing_status": "committed",
-    }
-    
-    // Serialize record data for storage
-    recordJSON, _ := json.Marshal(param.Record)
-    
-    // Insert audit log
-    query := `
-        INSERT INTO pipeline_audit_log 
-        (pipeline_name, record_id, commit_timestamp, record_data, processing_status)
-        VALUES (?, ?, ?, ?, ?)
-    `
-    
-    _, err = mysqlConn.Exec(query,
-        auditEntry["pipeline_name"],
-        auditEntry["record_id"],
-        auditEntry["commit_timestamp"],
-        string(recordJSON),
-        auditEntry["processing_status"],
-    )
-    
-    if err != nil {
-        param.Logger.Error("Failed to write audit log", zap.Error(err))
-        return
-    }
-    
-    // Update pipeline statistics
-    updatePipelineStats(mysqlConn, param.Ctx.GetName())
-    
-    // Trigger downstream notifications if needed
-    if shouldTriggerNotification(param.Record) {
-        sendDownstreamNotification(param.Ctx, param.Record)
-    }
+func Checkpoint(param *models.ICheckpointProps) (*models.CheckpointTune, error) {
+	param.Logger.Info("Checkpoint triggered", zap.Any("record_id", param.Record["id"]))
+
+	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
+	if err != nil {
+		param.Logger.Error("Failed to cast MySQL connection for audit log", zap.Error(err))
+		return nil, err
+	}
+
+	auditEntry := map[string]interface{}{
+		"pipeline_name":     param.Ctx.GetName(),
+		"record_id":         param.Record["id"],
+		"commit_timestamp":  time.Now().UTC(),
+		"record_data":       param.Record,
+		"source_table":      param.Record["_source_table"],
+		"destination_table": param.Record["_destination_table"],
+		"processing_status": "committed",
+	}
+
+	recordJSON, _ := json.Marshal(param.Record)
+
+	query := `
+		INSERT INTO pipeline_audit_log 
+		(pipeline_name, record_id, commit_timestamp, record_data, processing_status)
+		VALUES (?, ?, ?, ?, ?)
+	`
+
+	_, err = mysqlConn.Exec(query,
+		auditEntry["pipeline_name"],
+		auditEntry["record_id"],
+		auditEntry["commit_timestamp"],
+		string(recordJSON),
+		auditEntry["processing_status"],
+	)
+
+	if err != nil {
+		param.Logger.Error("Failed to write audit log (Database EXEC failed)", zap.Error(err))
+		return nil, err
+	}
+
+	updatePipelineStats(mysqlConn, param.Ctx.GetName())
+
+	if shouldTriggerNotification(param.Record) {
+		sendDownstreamNotification(param.Ctx, param.Record)
+	}
+
+	return &models.CheckpointTune{Action: ActionContinue}, nil
 }
 
 func updatePipelineStats(conn *client.Conn, pipelineName string) {
@@ -116,7 +123,6 @@ func updatePipelineStats(conn *client.Conn, pipelineName string) {
 }
 
 func shouldTriggerNotification(record map[string]any) bool {
-    // Example: trigger notification for high-value transactions
     if amount, ok := record["transaction_amount"].(float64); ok {
         return amount > 10000.0
     }
@@ -124,7 +130,6 @@ func shouldTriggerNotification(record map[string]any) bool {
 }
 
 func sendDownstreamNotification(ctx context.Context, record map[string]any) {
-    // Implementation for external notifications
     param.Logger.Info("Triggering downstream notification", zap.Any("record", record))
 }
 ```

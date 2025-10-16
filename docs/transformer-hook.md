@@ -19,15 +19,15 @@ When building transformers, consider these approaches for optimal reusability:
 Your transformer function must implement the following signature:
 
 ```go
-func Transformer(param *models.ITransformerParam) (map[string]interface{}, error)
+func Transformer(param *models.ITransformerProps) (map[string]interface{}, error)
 ```
 
 ### Parameters
 
-The `ITransformerParam` struct provides access to:
+The `ITransformerProps` struct provides access to:
 
 ```go
-type ITransformerParam struct {
+type ITransformerProps struct {
     Ctx           IPipelineContextContract          // Pipeline context
 	Logger        ILoggerContract                   // Logger for logging any message
     Record        map[string]any                    // Input data record to transform
@@ -46,7 +46,7 @@ type ITransformerParam struct {
 ## Implementation Example
 
 ```go
-func Transformer(param *models.ITransformerParam) (map[string]interface{}, error) {
+func Transformer(param *models.ITransformerProps) (map[string]interface{}, error) {
     param.Logger.Info("Processing customer record", zap.Any("record_id", param.Record["id"]))
     
     // Skip records without required fields

@@ -31,8 +31,8 @@ package client_connector_57_iso_entity_124
 
 import (
     "fmt"
-    "streamcraft/execution/core/coreinterface"
-    "streamcraft/execution/models"
+    "etlfunnel/execution/core/coreinterface"
+    "etlfunnel/execution/models"
 )
 
 type IUseConnector struct {
