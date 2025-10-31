@@ -54,14 +54,19 @@ type IBacklogProps struct {
 
 ```go
 import (
-    "etlfunnel/execution/models"
-    "etlfunnel/database/cast"
-    "encoding/json"
-    "time"
+	"encoding/json"
+	"etlfunnel/execution/models"
+	"etlfunnel/database/cast"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 func Backlog(param *models.IBacklogProps) (*models.BacklogTune, error) {
-	param.Logger.Error("Write failure detected, attempting to backlog record", zap.Any("record_id", param.Record["id"]))
+	param.Logger.Error("Write failure detected. Starting backlog process...",
+		zap.Int("failed_record_count", len(param.Records)),
+		zap.String("failure_stage", string(param.FailureStage)),
+	)
 
 	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
 	if err != nil {
@@ -70,59 +75,85 @@ func Backlog(param *models.IBacklogProps) (*models.BacklogTune, error) {
 		return nil, err
 	}
 
-	recordJSON, _ := json.Marshal(param.Records[0])
-
 	query := `
 		INSERT INTO failed_records 
 		(pipeline_name, record_id, record_data, failure_timestamp, retry_count, status)
 		VALUES (?, ?, ?, ?, 0, 'pending')
 	`
 
-	_, err = mysqlConn.Exec(query,
-		param.Ctx.GetName(),
-		param.Record["id"],
-		string(recordJSON),
-		time.Now().UTC(),
+	inserted := 0
+	for _, record := range param.Records {
+		recordJSON, _ := json.Marshal(record)
+		recordID := "<unknown>"
+		if id, ok := record["id"]; ok {
+			recordID = toString(id)
+		}
+
+		_, err := mysqlConn.Exec(query,
+			param.Ctx.GetName(),
+			recordID,
+			string(recordJSON),
+			time.Now().UTC(),
+		)
+
+		if err != nil {
+			param.Logger.Error("Failed to store backlog record", zap.String("record_id", recordID), zap.Error(err))
+			continue
+		}
+
+		inserted++
+		updateFailureStats(mysqlConn, param.Ctx.GetName())
+
+		if isCriticalRecord(record) {
+			sendFailureAlert(param, record, param.Ctx.GetName())
+		}
+	}
+
+	param.Logger.Info("Backlog process completed.",
+		zap.Int("total_failed", len(param.Records)),
+		zap.Int("successfully_backlogged", inserted),
 	)
 
-	if err != nil {
-		param.Logger.Error("Failed to store backlog record (Database EXEC failed)", zap.Error(err))
-		return nil, err 
-	}
-    
-	updateFailureStats(mysqlConn, param.Ctx.GetName())
-
-	if isCriticalRecord(param.Record) {
-		sendFailureAlert(param.Ctx, param.Record, param.Ctx.GetName())
-	}
-
-	param.Logger.Info("Record successfully backlogged. Continuing pipeline.", zap.Any("record_id", param.Record["id"]))
-	return &models.BacklogTune{Action: ActionContinue}, nil 
+	// Continue pipeline even if some records failed to backlog
+	return &models.BacklogTune{Action: models.ActionContinue}, nil
 }
 
-func updateFailureStats(conn *client.Conn, pipelineName string) {
-    query := `
-        INSERT INTO pipeline_failure_stats (pipeline_name, last_failure_time, failure_count)
-        VALUES (?, ?, 1)
-        ON DUPLICATE KEY UPDATE
-        last_failure_time = VALUES(last_failure_time),
-        failure_count = failure_count + 1
-    `
-    
-    conn.Exec(query, pipelineName, time.Now().UTC())
+func updateFailureStats(conn any, pipelineName string) {
+	query := `
+		INSERT INTO pipeline_failure_stats (pipeline_name, last_failure_time, failure_count)
+		VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE
+		last_failure_time = VALUES(last_failure_time),
+		failure_count = failure_count + 1
+	`
+	conn.Exec(query, pipelineName, time.Now().UTC())
 }
 
 func isCriticalRecord(record map[string]any) bool {
-    // Example: mark high-value transactions as critical
-    if priority, ok := record["priority"].(string); ok {
-        return priority == "critical" || priority == "high"
-    }
-    return false
+	if priority, ok := record["priority"].(string); ok {
+		return priority == "critical" || priority == "high"
+	}
+	return false
 }
 
-func sendFailureAlert(ctx context.Context, record map[string]any, pipeline string) {
-    param.Logger.Error("Critical record failure alert"zap.String("pipeline", pipeline), zap.Any("record", record))
+func sendFailureAlert(param *models.IBacklogProps, record map[string]any, pipeline string) {
+	param.Logger.Error("Critical record failure alert",
+		zap.String("pipeline", pipeline),
+		zap.Any("record", record),
+	)
 }
+
+func toString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case []byte:
+		return string(val)
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
 ```
 
 ## Creating a Backlog Hook

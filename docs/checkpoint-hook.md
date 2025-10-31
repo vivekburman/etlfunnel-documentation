@@ -55,14 +55,20 @@ type CheckpointTune struct {
 
 ```go
 import (
-    "etlfunnel/execution/models"
-    "etlfunnel/database/cast"
-    "encoding/json"
-    "time"
+	"encoding/json"
+	"etlfunnel/execution/models"
+	"etlfunnel/database/cast"
+	"fmt"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 func Checkpoint(param *models.ICheckpointProps) (*models.CheckpointTune, error) {
-	param.Logger.Info("Checkpoint triggered", zap.Any("record_id", param.Record["id"]))
+	param.Logger.Info("Checkpoint triggered",
+		zap.Int("record_count", len(param.Records)),
+		zap.String("pipeline", param.Ctx.GetName()),
+	)
 
 	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
 	if err != nil {
@@ -70,68 +76,88 @@ func Checkpoint(param *models.ICheckpointProps) (*models.CheckpointTune, error) 
 		return nil, err
 	}
 
-	auditEntry := map[string]interface{}{
-		"pipeline_name":     param.Ctx.GetName(),
-		"record_id":         param.Record["id"],
-		"commit_timestamp":  time.Now().UTC(),
-		"record_data":       param.Record,
-		"source_table":      param.Record["_source_table"],
-		"destination_table": param.Record["_destination_table"],
-		"processing_status": "committed",
-	}
-
-	recordJSON, _ := json.Marshal(param.Records[0])
-
 	query := `
 		INSERT INTO pipeline_audit_log 
 		(pipeline_name, record_id, commit_timestamp, record_data, processing_status)
 		VALUES (?, ?, ?, ?, ?)
 	`
 
-	_, err = mysqlConn.Exec(query,
-		auditEntry["pipeline_name"],
-		auditEntry["record_id"],
-		auditEntry["commit_timestamp"],
-		string(recordJSON),
-		auditEntry["processing_status"],
+	inserted := 0
+	for _, record := range param.Records {
+		recordJSON, _ := json.Marshal(record)
+		recordID := "<unknown>"
+		if id, ok := record["id"]; ok {
+			recordID = toString(id)
+		}
+
+		_, err := mysqlConn.Exec(query,
+			param.Ctx.GetName(),
+			recordID,
+			time.Now().UTC(),
+			string(recordJSON),
+			"committed",
+		)
+
+		if err != nil {
+			param.Logger.Error("Failed to insert audit log record",
+				zap.String("record_id", recordID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		inserted++
+		updatePipelineStats(mysqlConn, param.Ctx.GetName())
+
+		if shouldTriggerNotification(record) {
+			sendDownstreamNotification(param, record)
+		}
+	}
+
+	param.Logger.Info("Checkpoint completed",
+		zap.Int("total_records", len(param.Records)),
+		zap.Int("audited_records", inserted),
 	)
 
-	if err != nil {
-		param.Logger.Error("Failed to write audit log (Database EXEC failed)", zap.Error(err))
-		return nil, err
-	}
-
-	updatePipelineStats(mysqlConn, param.Ctx.GetName())
-
-	if shouldTriggerNotification(param.Record) {
-		sendDownstreamNotification(param.Ctx, param.Record)
-	}
-
-	return &models.CheckpointTune{Action: ActionContinue}, nil
+	return &models.CheckpointTune{Action: models.ActionContinue}, nil
 }
 
-func updatePipelineStats(conn *client.Conn, pipelineName string) {
-    query := `
-        INSERT INTO pipeline_stats (pipeline_name, last_commit_time, record_count)
-        VALUES (?, ?, 1)
-        ON DUPLICATE KEY UPDATE
-        last_commit_time = VALUES(last_commit_time),
-        record_count = record_count + 1
-    `
-    
-    conn.Exec(query, pipelineName, time.Now().UTC())
+func updatePipelineStats(conn any, pipelineName string) {
+	query := `
+		INSERT INTO pipeline_stats (pipeline_name, last_commit_time, record_count)
+		VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE
+			last_commit_time = VALUES(last_commit_time),
+			record_count = record_count + 1
+	`
+	conn.Exec(query, pipelineName, time.Now().UTC())
 }
 
 func shouldTriggerNotification(record map[string]any) bool {
-    if amount, ok := record["transaction_amount"].(float64); ok {
-        return amount > 10000.0
-    }
-    return false
+	if amount, ok := record["transaction_amount"].(float64); ok {
+		return amount > 10000.0
+	}
+	return false
 }
 
-func sendDownstreamNotification(ctx context.Context, record map[string]any) {
-    param.Logger.Info("Triggering downstream notification", zap.Any("record", record))
+func sendDownstreamNotification(param *models.ICheckpointProps, record map[string]any) {
+	param.Logger.Info("Triggering downstream notification",
+		zap.String("pipeline", param.Ctx.GetName()),
+		zap.Any("record", record),
+	)
 }
+
+func toString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case []byte:
+		return string(val)
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
 ```
 
 ## Creating a Checkpoint Hook
