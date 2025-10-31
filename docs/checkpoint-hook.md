@@ -33,7 +33,7 @@ const (
 type ICheckpointProps struct {
     Ctx           IPipelineContextContract          // Request context for logging and operations
     Logger        ILoggerContract                   // Logger for logging any message
-    Record        map[string]any                    // Committed data record
+    Records       []map[string]any                  // Committed data records
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection
     AuxilaryDB    map[string]IDatabaseEngine        // Additional database connections
@@ -80,7 +80,7 @@ func Checkpoint(param *models.ICheckpointProps) (*models.CheckpointTune, error) 
 		"processing_status": "committed",
 	}
 
-	recordJSON, _ := json.Marshal(param.Record)
+	recordJSON, _ := json.Marshal(param.Records[0])
 
 	query := `
 		INSERT INTO pipeline_audit_log 

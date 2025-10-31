@@ -30,8 +30,8 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: false,
             type: "category",
-            label: "Hooks",
-            items: ['transformer-hook', 'checkpoint-hook', 'backlog-hook']
+            label: "Controls",
+            items: ['transformer-hook', 'termination-rule-hook', 'checkpoint-hook', 'backlog-hook']
         },
         {
             collapsed: false,

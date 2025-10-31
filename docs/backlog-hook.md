@@ -36,7 +36,8 @@ type BacklogTune struct {
 type IBacklogProps struct {
     Ctx           IPipelineContextContract          // Request context for logging and operations
     Logger        ILoggerContract                   // Logger for logging any message
-    Record        map[string]any                    // Failed data record
+    FailureStage  FailureStage                      // Failure stage: Transformation or Destination
+    Records       []map[string]any                  // Failed data records
     SourceDB      IDatabaseEngine                   // Source database connection
     DestinationDB IDatabaseEngine                   // Destination database connection
     AuxilaryDB    map[string]IDatabaseEngine        // Additional database connections
@@ -69,7 +70,7 @@ func Backlog(param *models.IBacklogProps) (*models.BacklogTune, error) {
 		return nil, err
 	}
 
-	recordJSON, _ := json.Marshal(param.Record)
+	recordJSON, _ := json.Marshal(param.Records[0])
 
 	query := `
 		INSERT INTO failed_records 
