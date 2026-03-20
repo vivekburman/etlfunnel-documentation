@@ -1,53 +1,47 @@
 import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
-// This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
-
-/**
- * Creating a sidebar enables you to:
- - create an ordered group of docs
- - render a sidebar for each doc of that group
- - provide next/previous navigation
-
- The sidebars can be generated from the filesystem, or explicitly defined here.
-
- Create as many sidebars as you want.
- */
 const sidebars: SidebarsConfig = {
-    // Manual sidebar configuration with your specified sections
     tutorialSidebar: [
         {
             collapsed: false,
             type: 'category',
             label: 'Getting Started',
-            items: ['intro', 'setup-guide'],
+            items: ['intro', 'architecture', 'setup-guide'],
         },
         {
             collapsed: false,
             type: 'category',
-            label: 'Connectors',
-            items: ['connector-hub', 'connector-entity'],
-        },
-        {
-            collapsed: false,
-            type: "category",
-            label: "Controls",
-            items: ['transformer-hook', 'termination-rule-hook', 'checkpoint-hook', 'backlog-hook']
+            label: 'Pipeline Topology',
+            items: ['connector-hub', 'resource-flow', 'resource-collection'],
         },
         {
             collapsed: false,
             type: 'category',
-            label: 'Resources',
-            items: ['resource-flow', 'resource-collection', 'resource-orchestrator', 'user-libraries'],
+            label: 'Data Plane',
+            items: [
+                'connector-entity',
+                'transformer-hook',
+                'checkpoint-hook',
+                'backlog-hook',
+                'termination-rule-hook',
+            ],
         },
         {
             collapsed: false,
-            type: "category",
-            label: "Executions",
-            items: ['creating-a-new-build', 'integration-webhook']
+            type: 'category',
+            label: 'Control Plane',
+            items: ['resource-orchestrator', 'user-libraries', 'pipeline-runtime'],
         },
         {
-            type: "category",
-            label: "Code References",
+            collapsed: false,
+            type: 'category',
+            label: 'Executions',
+            items: ['creating-a-new-build', 'integration-webhook'],
+        },
+        {
+            collapsed: true,
+            type: 'category',
+            label: 'Code Reference',
             items: [
                 {
                     collapsed: false,
@@ -68,13 +62,12 @@ const sidebars: SidebarsConfig = {
                     items: [
                         'nosql-elasticsearch',
                         'nosql-mongo',
-                        'nosql-redis'
+                        'nosql-redis',
                     ],
                 },
-            ]
-        }
+            ],
+        },
     ],
 };
-
 
 export default sidebars;
