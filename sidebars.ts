@@ -11,7 +11,7 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: false,
             type: 'category',
-            label: 'Pipeline Topology',
+            label: 'Builder',
             items: ['connector-hub', 'resource-flow', 'resource-collection'],
         },
         {
@@ -30,7 +30,7 @@ const sidebars: SidebarsConfig = {
             collapsed: false,
             type: 'category',
             label: 'Control Plane',
-            items: ['resource-orchestrator', 'user-libraries', 'pipeline-runtime'],
+            items: ['resource-orchestrator', 'user-libraries', 'destination-write-tune-hook'],
         },
         {
             collapsed: false,
