@@ -5,3 +5,8 @@
 <path d="M0 0 C26.73 0 53.46 0 81 0 C81 7.59 81 15.18 81 23 C64.17 23 47.34 23 30 23 C30 29.93 30 36.86 30 44 C45.84 44 61.68 44 78 44 C78 51.59 78 59.18 78 67 C62.16 67 46.32 67 30 67 C30 75.91 30 84.82 30 94 C47.49 94 64.98 94 83 94 C83 101.59 83 109.18 83 117 C55.61 117 28.22 117 0 117 C0 78.39 0 39.78 0 0 Z " fill="#FDFDFD" transform="translate(162,139)"/>
 <path d="M0 0 C26.73 0 53.46 0 81 0 C81 7.59 81 15.18 81 23 C64.17 23 47.34 23 30 23 C30 30.26 30 37.52 30 45 C45.84 45 61.68 45 78 45 C78 52.59 78 60.18 78 68 C62.16 68 46.32 68 30 68 C30 84.17 30 100.34 30 117 C20.1 117 10.2 117 0 117 C0 78.39 0 39.78 0 0 Z " fill="#FDFDFD" transform="translate(271,138)"/>
 </svg>
+<!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="7" y="5" width="50" height="40" rx="4" fill="#F8FAFC"/>
+  <text x="32" y="25" font-family="system-ui, sans-serif" font-size="20" font-weight="700" fill="#1E293B" text-anchor="middle" dominant-baseline="middle">EF</text>
+  <path d="M17 45h30l-5 10H22z" fill="#3B82F6"/>
+</svg> -->
