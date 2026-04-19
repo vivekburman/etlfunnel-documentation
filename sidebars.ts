@@ -21,16 +21,20 @@ const sidebars: SidebarsConfig = {
             items: [
                 'connector-entity',
                 'transformer-hook',
-                'checkpoint-hook',
-                'backlog-hook',
-                'termination-rule-hook',
+                'user-libraries',
             ],
         },
         {
             collapsed: false,
             type: 'category',
             label: 'Control Plane',
-            items: ['resource-orchestrator', 'user-libraries', 'destination-write-tune-hook'],
+            items: [
+                'resource-orchestrator',
+                'destination-write-tune-hook',
+                'termination-rule-hook',
+                'checkpoint-hook',
+                'backlog-hook',
+            ],
         },
         {
             collapsed: false,
