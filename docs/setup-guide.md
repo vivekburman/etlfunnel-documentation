@@ -42,7 +42,7 @@ Runners are agents that execute ETL jobs on remote or local machines. Follow the
    - **Runner Name**: A descriptive name for your runner (e.g., `production-runner`, `dev-machine-01`)
    - **Hostname**: The hostname of the machine where this runner will operate
 
-<img src="/img/page_setup_guide/runner_download.png" alt="Runner Creation Modal" width="400" />
+<img src="./img/page_setup_guide/runner_download.png" alt="Runner Creation Modal" width="400" />
 
 ### Step 3: Generate API Key
 

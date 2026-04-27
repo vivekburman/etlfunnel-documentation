@@ -42,7 +42,7 @@ ETLFunnel installs on your own infrastructure. There is no cloud dependency, no 
 
 The core architectural decision in ETLFunnel is the separation of the **management layer** from the **execution layer**.
 
-<img src="/img/server_runner_architecture.svg" alt="Server Runner" height="300" />
+<img src="./img/server_runner_architecture.svg" alt="Server Runner" height="300" />
 
 
 **The Server** is the control center. It hosts the web interface where you define pipelines, configure connections, schedule builds, and view logs. You run one server per workspace.

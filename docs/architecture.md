@@ -6,7 +6,7 @@ ETLFunnel is built around a clean separation between two planes of execution: th
 
 Most ETL tools give you a single flat model — configure a source, configure a destination, define some transforms, run it. ETLFunnel divides that into two distinct layers that operate at different levels of the pipeline lifecycle.
 
-<img src="/img/pipeline_architecture.svg" alt="Pipeline" height="300" />
+<img src="./img/pipeline_architecture.svg" alt="Pipeline" height="300" />
 ---
 
 ## The Data Plane
