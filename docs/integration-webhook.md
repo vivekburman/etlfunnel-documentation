@@ -2,7 +2,7 @@
 
 Webhooks provide real-time notifications for your ETL operations, allowing you to stay informed about critical events without constantly monitoring the dashboard. Our ETL tool uses webhooks to automatically notify you when any build encounters an error, ensuring rapid response to data pipeline issues.
 
-<img src="./img/page_resource/webhook.png" alt="Webhook Integration" height="300" />
+<img src="img/page_resource/webhook.png" alt="Webhook Integration" height="300" />
 
 ## Supported Integrations
 
