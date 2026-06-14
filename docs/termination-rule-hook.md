@@ -20,7 +20,47 @@ func TerminateRule(param *models.TerminateRuleProps) (*models.TerminateRuleTune,
 
 ### Parameters
 
-The `TerminateRuleProps` struct provides access to:
+```go
+type TerminateRuleProps struct {
+	State models.IPipelineRuntimeState
+}
+```
+
+### Return Value
+
+```go
+type TerminateRuleTune struct {
+	MaxRecords           *uint64
+	IdleTimeout          *time.Duration
+	MaxPipelineTime      *time.Duration
+	UserDefinedCheckFunc func(*models.CustomTerminateRuleCheckProps) (*models.TerminateRuleActionTune, error)
+	CheckInterval        time.Duration
+}
+```
+
+### Tune Function Return
+
+```go
+type TerminateRuleActionTune struct {
+	RuleName string
+	Reason   string
+	Action   models.PipelineAction
+}
+```
+
+### Tune Function Parameters
+
+```go
+type CustomTerminateRuleCheckProps struct {
+	State         models.IPipelineRuntimeState
+	LastMessageAt time.Time
+	StartTime     time.Time
+	TotalMessages uint64
+}
+```
+
+### Referenced Types
+
 ```go
 type PipelineAction int
 
@@ -29,45 +69,19 @@ const (
 	ActionStop
 )
 
-type TerminateRuleProps struct {
-	Ctx    IPipelineContextContract  // Pipeline context for metadata and operations
-	Logger ILoggerContract           // Logger for tracking termination events
-}
+// Built-in rule name constants emitted by the platform's built-in checks.
+const (
+	TerminateRuleMaxRecords      = "MAX_RECORDS"
+	TerminateRuleIdleTimeout     = "IDLE_TIMEOUT"
+	TerminateRuleMaxPipelineTime = "MAX_PIPELINE_TIME"
+)
 
-type CustomTerminateRuleCheckProps struct {
-	Ctx           IPipelineContextContract  // Pipeline context
-	Logger        ILoggerContract           // Logger instance
-	TotalMessages uint64                    // Total messages processed so far
-	LastMessageAt time.Time                 // Timestamp of last processed message
-	StartTime     time.Time                 // Pipeline start timestamp
-}
-
-type TerminateRuleActionTune struct {
-	Action PipelineAction  // Continue or Stop the pipeline
-	Reason string          // Human-readable reason for termination
-}
-
-type TerminateRuleTune struct {
-	// MaxRecords defines the maximum number of messages/records to process
-	// before terminating the pipeline. When nil, no limit is enforced.
-	MaxRecords *uint64
-
-	// IdleTimeout specifies the duration of inactivity (no messages received)
-	// before terminating the pipeline. When nil, no idle timeout is enforced.
-	IdleTimeout *time.Duration
-
-	// MaxPipelineTime sets the maximum total execution time for the pipeline
-	// before terminating. When nil, no time limit is enforced.
-	MaxPipelineTime *time.Duration
-
-	// UserDefinedCheckFunc allows custom termination logic based on pipeline state.
-	// This function is called at each CheckInterval and can return a custom
-	// termination action. When nil, only built-in checks are performed.
-	UserDefinedCheckFunc func(*CustomTerminateRuleCheckProps) (*TerminateRuleActionTune, error)
-
-	// CheckInterval determines how frequently termination conditions are evaluated.
-	// Shorter intervals provide more responsive termination but increase overhead.
-	CheckInterval time.Duration
+type IPipelineRuntimeState interface {
+	GetName() string
+	GetFlowName() string
+	GetReplicaProps() map[string]any
+	GetLogger() models.ILoggerContract
+	GetDestinationWriteBatchSize() int
 }
 ```
 
@@ -83,70 +97,39 @@ type TerminateRuleTune struct {
 import (
     "etlfunnel/execution/models"
     "time"
-    "go.uber.org/zap"
 )
 
 func TerminateRule(param *models.TerminateRuleProps) (*models.TerminateRuleTune, error) {
 	maxRecords := uint64(10000)
 	idleTimeout := 5 * time.Minute
 	maxPipelineTime := 2 * time.Hour
-	
+
 	return &models.TerminateRuleTune{
 		MaxRecords:      &maxRecords,
 		IdleTimeout:     &idleTimeout,
 		MaxPipelineTime: &maxPipelineTime,
 		CheckInterval:   10 * time.Second,
-		
+
 		UserDefinedCheckFunc: func(checkProps *models.CustomTerminateRuleCheckProps) (*models.TerminateRuleActionTune, error) {
-			// Custom logic: Stop if it's past business hours and idle for 2 minutes
 			currentHour := time.Now().Hour()
 			isBusinessHours := currentHour >= 9 && currentHour < 18
-			
+
 			if !isBusinessHours {
 				idleDuration := time.Since(checkProps.LastMessageAt)
 				if idleDuration > 2*time.Minute {
-					checkProps.Logger.Info("Terminating: Outside business hours and idle",
-						zap.Duration("idle_duration", idleDuration),
-						zap.Uint64("total_processed", checkProps.TotalMessages),
-					)
 					return &models.TerminateRuleActionTune{
-						Action: models.ActionStop,
-						Reason: "Outside business hours with 2+ minutes idle time",
+						RuleName: "business-hours-idle",
+						Action:   models.ActionStop,
+						Reason:   "Outside business hours with 2+ minutes idle time",
 					}, nil
 				}
 			}
-			
-			// Custom logic: Stop if error rate exceeds threshold
-			errorRate := getErrorRate(checkProps.Ctx)
-			if errorRate > 0.15 { // 15% error rate
-				checkProps.Logger.Warn("Terminating: High error rate detected",
-					zap.Float64("error_rate", errorRate),
-					zap.Uint64("total_processed", checkProps.TotalMessages),
-				)
-				return &models.TerminateRuleActionTune{
-					Action: models.ActionStop,
-					Reason: "Error rate exceeded 15% threshold",
-				}, nil
-			}
-			
-			// Continue processing
+
 			return &models.TerminateRuleActionTune{
 				Action: models.ActionContinue,
 			}, nil
 		},
 	}, nil
-}
-
-func getErrorRate(ctx models.IPipelineContextContract) float64 {
-	// Example: Calculate error rate from pipeline metrics
-	totalProcessed := ctx.GetMetric("total_processed")
-	totalErrors := ctx.GetMetric("total_errors")
-	
-	if totalProcessed == 0 {
-		return 0.0
-	}
-	
-	return float64(totalErrors) / float64(totalProcessed)
 }
 ```
 
@@ -170,7 +153,7 @@ func getErrorRate(ctx models.IPipelineContextContract) float64 {
 ```go
 maxRecords := uint64(1000000)
 idleTimeout := 10 * time.Minute
-return &TerminateRuleTune{
+return &models.TerminateRuleTune{
     MaxRecords:    &maxRecords,
     IdleTimeout:   &idleTimeout,
     CheckInterval: 30 * time.Second,
@@ -181,7 +164,7 @@ return &TerminateRuleTune{
 ```go
 maxPipelineTime := 4 * time.Hour
 idleTimeout := 15 * time.Minute
-return &TerminateRuleTune{
+return &models.TerminateRuleTune{
     MaxPipelineTime: &maxPipelineTime,
     IdleTimeout:     &idleTimeout,
     CheckInterval:   20 * time.Second,
@@ -192,7 +175,7 @@ return &TerminateRuleTune{
 ```go
 maxRecords := uint64(100)
 maxPipelineTime := 5 * time.Minute
-return &TerminateRuleTune{
+return &models.TerminateRuleTune{
     MaxRecords:      &maxRecords,
     MaxPipelineTime: &maxPipelineTime,
     CheckInterval:   5 * time.Second,

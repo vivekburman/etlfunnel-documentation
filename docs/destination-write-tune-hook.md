@@ -7,7 +7,7 @@ Destination Write Rule is a control-plane hook that lets you dynamically adjust 
 By default, a pipeline writes records to the destination one at a time (`RecordsPerBatch: 1`). Destination Write Rule gives you two levers:
 
 - **Static sizing**: Set `RecordsPerBatch` in your init return to apply a fixed batch size for the entire run
-- **Dynamic sizing**: Supply a `UserDefinedCheckFunc` that is called on every ticker tick, letting you call `SetDestinationWriteBatchSize` to raise or lower the batch size on the fly
+- **Dynamic sizing**: Supply a `UserDefinedCheckFunc` that is called on every ticker tick. Return a `models.DestinationWriteActionTune` with `NewBatchSize` set to adjust the batch size — the library applies the change. Return `nil` or `NewBatchSize: nil` to leave the current size unchanged.
 
 The hook is evaluated on its own independent ticker and never blocks the main record-processing loop. If `UserDefinedCheckFunc` is `nil`, the batch size is held constant at the value set during initialisation.
 
@@ -25,8 +25,8 @@ The `DestinationWriteProps` struct provides access to:
 
 ```go
 type DestinationWriteProps struct {
-    State  IPipelineRuntimeState // Live pipeline state — call SetDestinationWriteBatchSize here
-    Logger ILoggerContract       // Logger for internal diagnostics
+	State  models.IPipelineRuntimeState
+	Logger models.ILoggerContract
 }
 ```
 
@@ -34,20 +34,19 @@ type DestinationWriteProps struct {
 
 ```go
 type DestinationWriteTune struct {
-    // RecordsPerBatch sets the initial (and static, if no UserDefinedCheckFunc is
-    // provided) number of records committed to the destination per write operation.
-    // Defaults to 1 when zero.
-    RecordsPerBatch uint
+	RecordsPerBatch      int
+	CheckInterval        time.Duration
+	UserDefinedCheckFunc func(*models.CustomDestinationWriteCheckProps) (*models.DestinationWriteActionTune, error)
+}
+```
 
-    // CheckInterval controls how frequently UserDefinedCheckFunc is invoked.
-    // Shorter intervals increase responsiveness at the cost of slightly higher
-    // overhead. Defaults to 1 second when zero.
-    CheckInterval time.Duration
+### Tune Function Return
 
-    // UserDefinedCheckFunc is called on every ticker tick with current pipeline
-    // metrics. Call param.State.SetDestinationWriteBatchSize(n) inside this
-    // function to apply a new batch size. When nil, the batch size remains static.
-    UserDefinedCheckFunc func(*CustomDestinationWriteCheckProps) error
+`UserDefinedCheckFunc` returns a `*models.DestinationWriteActionTune` on every tick. The library reads `NewBatchSize` and applies it atomically. Return `nil` or leave `NewBatchSize` as `nil` to make no change.
+
+```go
+type DestinationWriteActionTune struct {
+	NewBatchSize *int
 }
 ```
 
@@ -57,25 +56,33 @@ type DestinationWriteTune struct {
 
 ```go
 type CustomDestinationWriteCheckProps struct {
-    State            IPipelineRuntimeState // Call SetDestinationWriteBatchSize to apply changes
-    Logger           ILoggerContract       // Logger for tune-step diagnostics
-    TotalMessages    uint64                // Total records processed since pipeline start
-    SinceLastMessage time.Duration         // Time elapsed since the last record was processed
+	State            models.IPipelineRuntimeState
+	Logger           models.ILoggerContract
+	TotalMessages    uint64
+	SinceLastMessage time.Duration
 }
 ```
 
-### Applying a Batch Size Change
-
-Inside `UserDefinedCheckFunc`, use the following method on `param.State` to update the batch size atomically (safe to call concurrently with the record-processing loop):
+### Referenced Types
 
 ```go
-param.State.SetDestinationWriteBatchSize(newSize int)
-```
+type IPipelineRuntimeState interface {
+	GetName() string
+	GetFlowName() string
+	GetReplicaProps() map[string]any
+	GetLogger() models.ILoggerContract
+	GetDestinationWriteBatchSize() int
+}
 
-To read back the current value at any point:
-
-```go
-current := param.State.GetDestinationWriteBatchSize()
+type ILoggerContract interface {
+	Info(msg string, fields ...zap.Field)
+	Error(msg string, fields ...zap.Field)
+	Warn(msg string, fields ...zap.Field)
+	Debug(msg string, fields ...zap.Field)
+	DPanic(msg string, fields ...zap.Field)
+	Panic(msg string, fields ...zap.Field)
+	Fatal(msg string, fields ...zap.Field)
+}
 ```
 
 ## Benefits of Using Destination Write Rule
@@ -92,58 +99,29 @@ current := param.State.GetDestinationWriteBatchSize()
 import (
     "etlfunnel/execution/models"
     "time"
-
-    "go.uber.org/zap"
 )
 
-// DestinationWriteTune is called once before the pipeline loop starts.
-// Set RecordsPerBatch for the initial batch size and supply a
-// UserDefinedCheckFunc to adjust it dynamically on every tick.
 func DestinationWriteRule(param *models.DestinationWriteProps) (*models.DestinationWriteTune, error) {
-    param.Logger.Info("Initialising Destination Write Rule", zap.String("pipeline", param.State.GetName()))
-
     return &models.DestinationWriteTune{
-        RecordsPerBatch: 10,           // start with batches of 10
-        CheckInterval:   5 * time.Second,
+        RecordsPerBatch:      10,
+        CheckInterval:        5 * time.Second,
         UserDefinedCheckFunc: tuneFunc,
     }, nil
 }
 
-func tuneFunc(param *models.CustomDestinationWriteCheckProps) error {
-    current := param.State.GetDestinationWriteBatchSize()
+func tuneFunc(param *models.CustomDestinationWriteCheckProps) (*models.DestinationWriteActionTune, error) {
+    var newSize int
 
     switch {
-    // Pipeline appears idle — flush quickly with small batches
     case param.SinceLastMessage > 10*time.Second:
-        if current != 1 {
-            param.State.SetDestinationWriteBatchSize(1)
-            param.Logger.Info("Batch size reduced: pipeline idle",
-                zap.Duration("idle_for", param.SinceLastMessage),
-                zap.Int("new_batch_size", 1),
-            )
-        }
-
-    // High throughput — increase batch size to reduce write overhead
+        newSize = 1
     case param.TotalMessages > 50000:
-        if current < 100 {
-            param.State.SetDestinationWriteBatchSize(100)
-            param.Logger.Info("Batch size increased: high throughput",
-                zap.Uint64("total_messages", param.TotalMessages),
-                zap.Int("new_batch_size", 100),
-            )
-        }
-
-    // Moderate throughput — mid-range batch size
+        newSize = 100
     default:
-        if current != 25 {
-            param.State.SetDestinationWriteBatchSize(25)
-            param.Logger.Info("Batch size set: normal throughput",
-                zap.Int("new_batch_size", 25),
-            )
-        }
+        newSize = 25
     }
 
-    return nil
+    return &models.DestinationWriteActionTune{NewBatchSize: &newSize}, nil
 }
 ```
 
@@ -160,7 +138,6 @@ func tuneFunc(param *models.CustomDestinationWriteCheckProps) error {
 
 - **Start Conservative**: Begin with a modest `RecordsPerBatch` (e.g., `10–50`) and scale up only when throughput data justifies it
 - **Choose a Sensible `CheckInterval`**: Values between 1–30 seconds work well for most workloads; sub-second intervals add overhead without meaningful benefit
-- **Guard Against No-ops**: Check the current batch size before calling `SetDestinationWriteBatchSize` to avoid redundant atomic writes on every tick
-- **Log Size Changes**: Log every adjustment with the reason and new value — it makes performance investigations far easier
+- **Return `nil` for No Change**: If no adjustment is needed, return `nil` or `&models.DestinationWriteActionTune{NewBatchSize: nil}` — the library skips the update
 - **Account for Idle Periods**: Always handle the `SinceLastMessage > threshold` case explicitly to avoid holding a large in-memory batch with no incoming records
 - **Keep Tune Logic Lightweight**: `UserDefinedCheckFunc` runs on a hot path; avoid blocking I/O calls inside it

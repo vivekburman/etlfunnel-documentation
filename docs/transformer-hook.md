@@ -19,63 +19,69 @@ When building transformers, consider these approaches for optimal reusability:
 Your transformer function must implement the following signature:
 
 ```go
-func Transformer(param *models.ITransformerProps) (map[string]interface{}, error)
+func Transformer(param *models.TransformerProps) (map[string]any, error)
 ```
 
 ### Parameters
 
-The `ITransformerProps` struct provides access to:
+The `TransformerProps` struct provides access to:
 
 ```go
-type ITransformerProps struct {
-    Ctx           IPipelineContextContract          // Pipeline context
-	Logger        ILoggerContract                   // Logger for logging any message
-    Record        map[string]any                    // Input data record to transform
-    SourceDB      IDatabaseEngine                   // Source database connection
-    DestinationDB IDatabaseEngine                   // Destination database connection
-    AuxilaryDBMap map[string]IDatabaseEngine        // Additional database connections
+type TransformerProps struct {
+	State              IPipelineRuntimeState
+	Record             map[string]any
+	SourceDBConn       IDatabaseEngine
+	DestDBConn         IDatabaseEngine
+	AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+```
+
+`IPipelineRuntimeState` is a restricted, safe view of the running pipeline exposed to callbacks. It provides observable properties and controlled write operations:
+
+```go
+type IPipelineRuntimeState interface {
+	GetName() string                       // Pipeline name
+	GetFlowName() string                   // Parent flow name
+	GetReplicaProps() map[string]any       // Shard/replica metadata
+	GetLogger() ILoggerContract            // Structured logger
+	GetDestinationWriteBatchSize() int     // Current batch size
 }
 ```
 
 ### Return Values
 
-- **Success**: Return the transformed record as `map[string]interface{}`
+- **Success**: Return the transformed record as `map[string]any`
 - **Skip Record**: Return `nil, nil` to skip the current record and continue with the next
 - **Error**: Return `nil, error` to halt pipeline execution with an error
 
 ## Implementation Example
 
 ```go
-func Transformer(param *models.ITransformerProps) (map[string]interface{}, error) {
-    param.Logger.Info("Processing customer record", zap.Any("record_id", param.Record["id"]))
-    
+func Transformer(param *models.TransformerProps) (map[string]any, error) {
     // Skip records without required fields
     email, exists := param.Record["email"]
     if !exists || email == "" {
-        param.Logger.Warn("Skipping record: missing email")
         return nil, nil
     }
-    
+
     // Transform and enrich the record
-    transformed := map[string]interface{}{
-        "customer_id":    param.Record["id"],
-        "email":          strings.ToLower(email.(string)),
-        "full_name":      fmt.Sprintf("%s %s", param.Record["first_name"], param.Record["last_name"]),
-        "created_at":     time.Now().UTC(),
-        "pipeline_source": param.Ctx.GetName(),
+    transformed := map[string]any{
+        "customer_id": param.Record["id"],
+        "email":       strings.ToLower(email.(string)),
+        "full_name":   fmt.Sprintf("%s %s", param.Record["first_name"], param.Record["last_name"]),
+        "created_at":  time.Now().UTC(),
     }
-    
+
     // Add computed fields
     if phone, ok := param.Record["phone"].(string); ok && phone != "" {
         transformed["has_phone"] = true
         transformed["phone_formatted"] = formatPhoneNumber(phone)
     }
-    
+
     return transformed, nil
 }
 
 func formatPhoneNumber(phone string) string {
-    // Remove non-numeric characters
     digits := regexp.MustCompile(`\D`).ReplaceAllString(phone, "")
     if len(digits) == 10 {
         return fmt.Sprintf("(%s) %s-%s", digits[0:3], digits[3:6], digits[6:10])

@@ -18,8 +18,17 @@ The Connector Hub allows you to configure and manage connections to various data
 ### Non-Relational Databases
 - Redis
 - MongoDB
+- Elasticsearch
+- Cassandra
+- RabbitMQ
+- Kafka
+
+### API
+- REST API
 
 ## Database Connectors
+
+## Relational DB Connectors
 
 ### MySQL Connector
 
@@ -149,6 +158,8 @@ Oracle connector supports enterprise Oracle databases with multiple change detec
 - **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
+## Non-Relational DB Connectors
+
 ### Redis Connector
 
 Redis connector enables integration with Redis key-value stores, supporting various Redis data structures and real-time streaming capabilities.
@@ -202,6 +213,119 @@ MongoDB connector provides comprehensive integration with MongoDB databases, sup
 :::tip
 Change Streams require a replica set or sharded cluster configuration. For standalone MongoDB instances, use "By Oplog Trailing" or "By Query" strategies.
 :::
+
+### Elasticsearch Connector
+
+Elasticsearch connector enables integration with Elasticsearch clusters for full-text search and analytics workloads.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| URL | Text | - | Elasticsearch cluster URL |
+| Username | Text | - | Username for authentication |
+| Password | Password | - | Password for authentication |
+| Cloud ID | Text | - | Elastic Cloud deployment ID |
+| API Key | Text | - | API key for authentication |
+| Insecure Skip | Boolean | false | Skip TLS certificate verification |
+
+**Data Processing Strategies:**
+- **By Query**: DSL query-based document retrieval
+- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Write Operation**: Use as destination with index operation generation for document insertion
+
+### Cassandra Connector
+
+Cassandra connector provides integration with Apache Cassandra clusters for high-throughput, distributed data workloads.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Hosts | List | - | Cassandra node hostnames or IP addresses |
+| Port | Number | 9042 | Cassandra native transport port |
+| Keyspace | Text | - | Target keyspace name |
+| Username | Text | - | Cassandra username for authentication |
+| Password | Password | - | Cassandra password for authentication |
+| Consistency | Dropdown | quorum | Read/write consistency level |
+| Data Center | Text | - | Data center name for DC-aware routing |
+| TLS Enabled | Boolean | false | Enable TLS encryption |
+| TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+
+**Data Processing Strategies:**
+- **By Query**: CQL query-based row retrieval
+- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Write Operation**: Use as destination with CQL generation for row insertion
+
+### RabbitMQ Connector
+
+RabbitMQ connector provides integration with RabbitMQ message brokers for event-driven and streaming data pipelines.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Host | Text | localhost | RabbitMQ server hostname or IP address |
+| Port | Number | 5672 | RabbitMQ AMQP port number |
+| Username | Text | - | RabbitMQ username for authentication |
+| Password | Password | - | RabbitMQ password for authentication |
+| VHost | Text | / | Virtual host name |
+| Use TLS | Boolean | false | Enable TLS encryption |
+
+**Data Processing Strategies:**
+- **By Consume**: Consume messages from a queue in real time
+- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Write Operation**: Use as destination with message publishing for data delivery
+
+### Kafka Connector
+
+Kafka connector enables integration with Apache Kafka clusters for high-throughput, fault-tolerant streaming data pipelines.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Brokers | List | - | Kafka broker addresses |
+| Client ID | Text | - | Kafka client identifier |
+| SASL Mechanism | Dropdown | - | SASL auth: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512 |
+| SASL Username | Text | - | SASL username |
+| SASL Password | Password | - | SASL password |
+| TLS Enabled | Boolean | false | Enable TLS encryption |
+| TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+| Kafka Version | Text | - | Broker version (e.g. 3.6.0); leave empty for auto-negotiate |
+
+**Data Processing Strategies:**
+- **By Consume**: Consume messages from a topic in real time
+- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Write Operation**: Use as destination with message production for data delivery
+
+## API Connectors
+
+### REST API Connector
+
+REST API connector enables integration with any HTTP/HTTPS API endpoint, supporting multiple authentication schemes.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Base URL | Text | - | Root URL of the API |
+| Auth Type | Dropdown | none | Authentication method: none, bearer, basic, api_key, oauth2, custom |
+| Token | Text | - | Bearer token (for bearer auth) |
+| API Key | Text | - | API key value |
+| API Key Header | Text | - | Header name for the API key |
+| Client ID | Text | - | OAuth2 client ID |
+| Client Secret | Text | - | OAuth2 client secret |
+| Token URL | Text | - | OAuth2 token endpoint |
+| Scopes | List | - | OAuth2 scopes |
+| Username | Text | - | Username (for basic auth) |
+| Password | Password | - | Password (for basic auth) |
+| TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+
+**Data Processing Strategies:**
+- **By Request**: Execute HTTP requests and stream response data
+- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Write Operation**: Use as destination with HTTP request generation for data delivery
 
 ## Connection Management
 
