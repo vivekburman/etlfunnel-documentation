@@ -27,25 +27,25 @@ When configuring Elasticsearch as a source database, the system uses these struc
 ```go
 // Source operations
 type ElasticSourceFetch struct {
-    PipelineName      string
-    SourceDBConn      *elasticsearch.Client
-    AuxilaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn        IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *elasticsearch.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
 }
 
 type ElasticSourceQuery struct {
-    PipelineName      string
-    SourceDBConn      *elasticsearch.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *elasticsearch.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type ElasticQueryTune struct {
+    Body          any
     QueryType     DBElasticsearchQueryType
     Index         string
-    Body          interface{}
-    ScrollTimeout time.Duration
     DocumentID    string
+    ScrollTimeout time.Duration
 }
 
 const (
@@ -59,7 +59,7 @@ const (
 
 These structures provide:
 
-- **Pipeline Name** - Unique identifier for the ETL operation
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct Elasticsearch client connection for data extraction  
 - **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
@@ -68,45 +68,42 @@ These structures provide:
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *ElasticSourceFetch) <-chan map[string]any {
+func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan map[string]any {
     ch := make(chan map[string]any)
-    
+
     go func() {
         defer close(ch)
-        
-        // Search query for the first batch
+
         searchQuery := map[string]interface{}{
             "query": map[string]interface{}{
                 "match_all": map[string]interface{}{},
             },
             "size": 100,
         }
-        
+
         body, _ := json.Marshal(searchQuery)
         res, err := param.SourceDBConn.Search(
-            param.SourceDBConn.Search.WithIndex(param.Ctx.GetName()),
+            param.SourceDBConn.Search.WithIndex(param.State.GetName()),
             param.SourceDBConn.Search.WithBody(bytes.NewReader(body)),
             param.SourceDBConn.Search.WithScroll(time.Minute),
         )
-        
+
         if err != nil {
             log.Println("search error:", err)
             return
         }
         defer res.Body.Close()
-        
+
         var searchResponse map[string]interface{}
         json.NewDecoder(res.Body).Decode(&searchResponse)
-        
-        // Process initial results
+
         hits := searchResponse["hits"].(map[string]interface{})["hits"].([]interface{})
         for _, hit := range hits {
             hitMap := hit.(map[string]interface{})
             source := hitMap["_source"].(map[string]interface{})
             ch <- source
         }
-        
-        // Continue with scroll if scroll_id exists
+
         scrollID := searchResponse["_scroll_id"].(string)
         for scrollID != "" {
             scrollRes, err := param.SourceDBConn.Scroll(
@@ -117,40 +114,39 @@ func (c *IUseConnector) FetchRecords(param *ElasticSourceFetch) <-chan map[strin
                 break
             }
             defer scrollRes.Body.Close()
-            
+
             var scrollResponse map[string]interface{}
             json.NewDecoder(scrollRes.Body).Decode(&scrollResponse)
-            
+
             scrollHits := scrollResponse["hits"].(map[string]interface{})["hits"].([]interface{})
             if len(scrollHits) == 0 {
                 break
             }
-            
+
             for _, hit := range scrollHits {
                 hitMap := hit.(map[string]interface{})
                 source := hitMap["_source"].(map[string]interface{})
                 ch <- source
             }
-            
+
             scrollID = scrollResponse["_scroll_id"].(string)
         }
     }()
-    
+
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *ElasticSourceQuery) (*ElasticQueryTune, error) {
-    // Generate a match_all query for the pipeline index
+func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models.ElasticQueryTune, error) {
     query := map[string]interface{}{
         "query": map[string]interface{}{
             "match_all": map[string]interface{}{},
         },
         "size": 10,
     }
-    
-    return &ElasticQueryTune{
-        QueryType:     ElasticsearchQueryTypeSearch,
-        Index:         param.Ctx.GetName(),
+
+    return &models.ElasticQueryTune{
+        QueryType:     models.ElasticsearchQueryTypeSearch,
+        Index:         param.State.GetName(),
         Body:          query,
         ScrollTimeout: time.Minute,
     }, nil
@@ -167,14 +163,14 @@ The Elasticsearch destination interface provides structured data loading operati
 
 ```go
 type IClientDBElasticDest interface {
-    GenerateQuery(param *models.ElasticDestQuery) (*models.ElasticDestQueryTune, error)
+    GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error)
 }
 ```
 
 This interface enables:
 
 - **Document Indexing** - Optimized CREATE, INDEX, and UPDATE operations
-- **Bulk Processing** - Efficient handling of large record sets  
+- **Bulk Processing** - Receives a batch of records and returns one query tune per record
 - **Upsert Operations** - Combined insert and update functionality
 
 ### Destination Configuration Structure
@@ -184,37 +180,36 @@ When using Elasticsearch as a destination, the system uses these struct definiti
 ```go
 // Destination operations
 type ElasticDestQuery struct {
-    PipelineName      string
-    Record            map[string]any
-    SourceDBConn      IDatabaseEngine
-    DestDBConn        *elasticsearch.Client
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    Records            []map[string]any
+    SourceDBConn       IDatabaseEngine
+    DestDBConn         *elasticsearch.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type ElasticDestQueryTune struct {
-    Index           string
-    DocID           string
-    Operation       DBElasticWriteOperationType
-    Document        map[string]any
-    Upsert          map[string]any
-    RefreshPolicy   string // "true", "wait_for", "false"
-    Script          string
-    ScriptParams    map[string]any
-    RecordsPerBatch int
+    Document      map[string]any
+    Upsert        map[string]any
+    ScriptParams  map[string]any
+    Index         string
+    DocID         string
+    Operation     DBElasticWriteOperationType
+    RefreshPolicy string
+    Script        string
 }
 
 const (
-    ElasticWriteOperationTypeIndex  DBElasticWriteOperationType = "INDEX"
-    ElasticWriteOperationTypeCreate DBElasticWriteOperationType = "CREATE"
-    ElasticWriteOperationTypeUpdate DBElasticWriteOperationType = "UPDATE"
-    ElasticWriteOperationTypeDelete DBElasticWriteOperationType = "DELETE"
+    ElasticWriteIndex  DBElasticWriteOperationType = "INDEX"
+    ElasticWriteCreate DBElasticWriteOperationType = "CREATE"
+    ElasticWriteUpdate DBElasticWriteOperationType = "UPDATE"
+    ElasticWriteDelete DBElasticWriteOperationType = "DELETE"
 )
 ```
 
 This structure manages:
 
-- **Pipeline Identification** - Links destination operations to specific ETL workflows
-- **Record Processing** - Handles individual data records for transformation and loading
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of data records for transformation and loading
 - **Connection Management** - Maintains source, destination, and auxiliary database connections
 - **Operation Types** - Supports various Elasticsearch write operations
 - **Refresh Policies** - Controls when documents become searchable
@@ -222,35 +217,36 @@ This structure manages:
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) (*models.ElasticDestQueryTune, error) {
-    // Generate document ID from record if not provided
-    docID := ""
-    if id, exists := param.Record["id"]; exists {
-        docID = fmt.Sprintf("%v", id)
-    } else {
-        // Generate UUID if no ID field exists
-        docID = fmt.Sprintf("%d", time.Now().UnixNano())
+func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error) {
+    tunes := make([]*models.ElasticDestQueryTune, 0, len(param.Records))
+
+    for _, rec := range param.Records {
+        docID := ""
+        if id, exists := rec["id"]; exists {
+            docID = fmt.Sprintf("%v", id)
+        } else {
+            docID = fmt.Sprintf("%d", time.Now().UnixNano())
+        }
+
+        document := make(map[string]any)
+        for k, v := range rec {
+            document[k] = v
+        }
+
+        if _, exists := document["@timestamp"]; !exists {
+            document["@timestamp"] = time.Now().UTC().Format(time.RFC3339)
+        }
+
+        tunes = append(tunes, &models.ElasticDestQueryTune{
+            Index:         param.State.GetName(),
+            DocID:         docID,
+            Operation:     models.ElasticWriteIndex,
+            Document:      document,
+            RefreshPolicy: "false",
+        })
     }
-    
-    // Prepare document for indexing
-    document := make(map[string]any)
-    for k, v := range param.Record {
-        document[k] = v
-    }
-    
-    // Add timestamp if not present
-    if _, exists := document["@timestamp"]; !exists {
-        document["@timestamp"] = time.Now().UTC().Format(time.RFC3339)
-    }
-    
-    return &models.ElasticDestQueryTune{
-        Index:           param.Ctx.GetName(),
-        DocID:           docID,
-        Operation:       ElasticWriteOperationTypeIndex,
-        Document:        document,
-        RefreshPolicy:   "false", // Don't force refresh for better performance
-        RecordsPerBatch: 1000,    // Bulk size for batch operations
-    }, nil
+
+    return tunes, nil
 }
 ```
 

@@ -31,58 +31,93 @@ When configuring Redis as a source database, the system uses these struct defini
 ```go
 // Source operations
 type RedisSourceKeys struct {
-    PipelineName      string
-    SourceDBConn      *redis.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *redis.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type RedisSourceKeyspace struct {
-    PipelineName      string
-    SourceDBConn      *redis.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *redis.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type RedisSourceStreams struct {
-    PipelineName      string
-    SourceDBConn      *redis.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *redis.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+
+type RedisSourceFetch struct {
+    State              IPipelineRuntimeState
+    SourceDBConn       *redis.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
+}
+
+// RedisRawValue carries a raw value read from a Redis key.
+type RedisRawValue struct {
+    Value    any
+    Key      string
+    DataType RedisDataType
+    TTL      time.Duration
+}
+
+// RedisRawKeySpaceEvent carries a keyspace notification event.
+type RedisRawKeySpaceEvent struct {
+    Pattern string
+    Channel string
+    Event   string
+    Key     string
 }
 
 type RedisSourceKeysTune struct {
+    ParseFn         func(RedisRawValue) (map[string]any, error)
     SpecificKeyList []string
     KeyPatterns     []string
     ScanCount       int
 }
 
 type RedisSourceStreamsTune struct {
-    StreamNames     []string
     ConsumerGroup   string
     ConsumerName    string
     SpecificStartId string
     StartFrom       string
+    StreamNames     []string
     BatchSize       int
     BlockTime       int
-    AutoAck         bool
     ClaimMinIdle    int
+    AutoAck         bool
 }
 
 type RedisSourceKeySpacesTune struct {
+    ParseFn           func(RedisRawKeySpaceEvent) (map[string]any, error)
     NotificationTypes []string
     KeyPatterns       []string
+    SubscriptionMode  RedisSubscriptionMode
     Database          int
-    SubscriptionMode  string
 }
+
+type RedisSubscriptionMode string
+
+const (
+    RedisSubscriptionModeKeyspace RedisSubscriptionMode = "keyspace"
+    RedisSubscriptionModeKeyevent RedisSubscriptionMode = "keyevent"
+    RedisSubscriptionModeBoth     RedisSubscriptionMode = "both"
+)
 ```
 
 These structures provide:
 
-- **Pipeline Name** - Unique identifier for the ETL operation
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct Redis client connection for data extraction
 - **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for lookup operations
+- **Keys ParseFn** - Controls how raw Redis key values are shaped into pipeline records
+- **Keyspace ParseFn** - Controls how raw keyspace notification events are shaped into pipeline records
 
 ### Example Source
 
@@ -92,12 +127,20 @@ func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.Red
         SpecificKeyList: []string{"user:*", "session:*"},
         KeyPatterns:     []string{"cache:*", "temp:*"},
         ScanCount:       100,
+        ParseFn: func(rv models.RedisRawValue) (map[string]any, error) {
+            return map[string]any{
+                "key":      rv.Key,
+                "value":    rv.Value,
+                "type":     string(rv.DataType),
+                "ttl_secs": int64(rv.TTL.Seconds()),
+            }, nil
+        },
     }, nil
 }
 
 func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsTune, error) {
     return &models.RedisSourceStreamsTune{
-        StreamNames:     []string{param.Ctx.GetName() + ":events"},
+        StreamNames:     []string{param.State.GetName() + ":events"},
         ConsumerGroup:   "etl-group",
         ConsumerName:    "etl-consumer-1",
         SpecificStartId: "0",
@@ -111,10 +154,17 @@ func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*mode
 
 func (c *IUseConnector) GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesTune, error) {
     return &models.RedisSourceKeySpacesTune{
-        NotificationTypes: []string{"KEA"}, // Keyspace, Keyevent, All operations
+        NotificationTypes: []string{"KEA"},
         KeyPatterns:       []string{"user:*", "session:*"},
         Database:          0,
-        SubscriptionMode:  "keyspace",
+        SubscriptionMode:  models.RedisSubscriptionModeKeyspace,
+        ParseFn: func(event models.RedisRawKeySpaceEvent) (map[string]any, error) {
+            return map[string]any{
+                "key":     event.Key,
+                "event":   event.Event,
+                "channel": event.Channel,
+            }, nil
+        },
     }, nil
 }
 
@@ -125,8 +175,7 @@ func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan map[
         defer close(ch)
         ctx := context.Background()
 
-        // Scan for keys matching pattern
-        iter := param.SourceDBConn.Scan(ctx, 0, param.Ctx.GetName()+":*", 100).Iterator()
+        iter := param.SourceDBConn.Scan(ctx, 0, param.State.GetName()+":*", 100).Iterator()
         for iter.Next(ctx) {
             key := iter.Val()
             val, err := param.SourceDBConn.Get(ctx, key).Result()
@@ -135,12 +184,10 @@ func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan map[
                 continue
             }
 
-            record := map[string]any{
+            ch <- map[string]any{
                 "key":   key,
                 "value": val,
-                "type":  "string",
             }
-            ch <- record
         }
 
         if err := iter.Err(); err != nil {
@@ -162,15 +209,15 @@ The Redis destination interface provides structured data loading operations:
 
 ```go
 type IClientDBRedisDest interface {
-    GenerateQuery(param *models.RedisDestQuery) (*models.RedisDestQueryTune, error)
+    GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryTune, error)
 }
 ```
 
 This interface enables:
 
-- **Multiple Data Types** - Support for strings, hashes, lists, sets, and sorted sets
+- **Multiple Data Types** - Support for strings, hashes, lists, sets, sorted sets, and streams
 - **Expiration Management** - TTL settings for automatic data cleanup
-- **Batch Processing** - Efficient handling of large record sets
+- **Batch Processing** - Receives a batch of records and returns one query tune per record
 
 ### Destination Configuration Structure
 
@@ -179,69 +226,84 @@ When using Redis as a destination, the system uses this struct definition:
 ```go
 // Destination operations
 type RedisDestQuery struct {
-    PipelineName      string
-    Record            map[string]any
-    SourceDBConn      IDatabaseEngine
-    DestDBConn        *redis.Client
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    Records            []map[string]any
+    SourceDBConn       IDatabaseEngine
+    DestDBConn         *redis.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type RedisDestQueryTune struct {
-    Operation       string
-    Key             string
-    Value           any
-    Expiration      time.Duration
-    RecordsPerBatch int
+    Value      any
+    Operation  RedisDestOperation
+    Key        string
+    Expiration time.Duration
+    MaxLen     int64
+    Approx     bool
 }
+
+type RedisDestOperation string
+
+const (
+    RedisDestOpSet    RedisDestOperation = "SET"
+    RedisDestOpHSet   RedisDestOperation = "HSET"
+    RedisDestOpSAdd   RedisDestOperation = "SADD"
+    RedisDestOpLPush  RedisDestOperation = "LPUSH"
+    RedisDestOpRPush  RedisDestOperation = "RPUSH"
+    RedisDestOpZAdd   RedisDestOperation = "ZADD"
+    RedisDestOpIncr   RedisDestOperation = "INCR"
+    RedisDestOpDecr   RedisDestOperation = "DECR"
+    RedisDestOpExpire RedisDestOperation = "EXPIRE"
+    RedisDestOpXAdd   RedisDestOperation = "XADD"
+)
 ```
 
 This structure manages:
 
-- **Pipeline Identification** - Links destination operations to specific ETL workflows
-- **Record Processing** - Handles individual data records for transformation and loading
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of data records for transformation and loading
 - **Connection Management** - Maintains source, destination, and auxiliary database connections
-- **Operation Configuration** - Specifies Redis commands and parameters
+- **Operation Configuration** - Specifies typed Redis commands and parameters
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) (*models.RedisDestQueryTune, error) {
-    // Determine operation based on record structure
-    operation := "SET"
-    key := fmt.Sprintf("%s:%v", param.Ctx.GetName(), param.Record["id"])
-    value := param.Record["data"]
-    expiration := time.Duration(0)
+func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryTune, error) {
+    tunes := make([]*models.RedisDestQueryTune, 0, len(param.Records))
 
-    // Check if record specifies expiration
-    if ttl, exists := param.Record["ttl"]; exists {
-        if ttlInt, ok := ttl.(int); ok {
-            expiration = time.Duration(ttlInt) * time.Second
+    for _, rec := range param.Records {
+        key := fmt.Sprintf("%s:%v", param.State.GetName(), rec["id"])
+        expiration := time.Duration(0)
+
+        if ttl, exists := rec["ttl"]; exists {
+            if ttlInt, ok := ttl.(int); ok {
+                expiration = time.Duration(ttlInt) * time.Second
+            }
         }
+
+        op := models.RedisDestOpSet
+        if recordType, exists := rec["type"]; exists {
+            switch recordType {
+            case "hash":
+                op = models.RedisDestOpHSet
+            case "list":
+                op = models.RedisDestOpLPush
+            case "set":
+                op = models.RedisDestOpSAdd
+            case "zset":
+                op = models.RedisDestOpZAdd
+            }
+        }
+
+        tunes = append(tunes, &models.RedisDestQueryTune{
+            Operation:  op,
+            Key:        key,
+            Value:      rec["data"],
+            Expiration: expiration,
+        })
     }
 
-    // Handle different data types
-    if recordType, exists := param.Record["type"]; exists {
-        switch recordType {
-        case "hash":
-            operation = "HSET"
-        case "list":
-            operation = "LPUSH"
-        case "set":
-            operation = "SADD"
-        case "zset":
-            operation = "ZADD"
-        default:
-            operation = "SET"
-        }
-    }
-
-    return &models.RedisDestQueryTune{
-        Operation:       operation,
-        Key:             key,
-        Value:           value,
-        Expiration:      expiration,
-        RecordsPerBatch: 100,
-    }, nil
+    return tunes, nil
 }
 ```
 
