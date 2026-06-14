@@ -29,24 +29,24 @@ When configuring MariaDB as a source database, the system uses these struct defi
 ```go
 // Source operations
 type MariaSourceFetch struct {
-    PipelineName      string
-    SourceDBConn      *client.Conn
-    AuxilaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn        IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *client.Conn
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
 }
 
 type MariaSourceQuery struct {
-    PipelineName      string
-    SourceDBConn      *client.Conn
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *client.Conn
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
 }
 
 type MariaSourceBinlog struct {
-    PipelineName      string
-    SourceDBConn      *client.Conn
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *client.Conn
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MariaSourceQueryTune struct {
@@ -54,50 +54,73 @@ type MariaSourceQueryTune struct {
 }
 
 type MariaSourceBinlogTune struct {
+    ParseFn  func(ChangeEvent) (map[string]any, error)
     ServerID uint32
 }
 ```
 
 These structures provide:
 
-- **Pipeline Name** - Unique identifier for the ETL operation
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct MariaDB connection instance for data extraction
 - **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
+- **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
+
+### ChangeEvent
+
+`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+
+```go
+type ChangeEvent struct {
+    Before    map[string]any
+    After     map[string]any
+    Meta      map[string]any
+    Operation ChangeEventOperation
+    Database  string
+    Table     string
+    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+}
+
+type ChangeEventOperation string
+
+const (
+    ChangeEventOpInsert ChangeEventOperation = "INSERT"
+    ChangeEventOpUpdate ChangeEventOperation = "UPDATE"
+    ChangeEventOpDelete ChangeEventOperation = "DELETE"
+    ChangeEventOpDDL    ChangeEventOperation = "DDL"
+)
+```
+
+| Field | Description |
+|-------|-------------|
+| `Before` | Row state before the change. Set for `UPDATE` and `DELETE`; `nil` for `INSERT` and `DDL`. |
+| `After` | Row state after the change. Set for `INSERT` and `UPDATE`; `nil` for `DELETE` and `DDL`. |
+| `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
+| `Database` | Source database name. |
+| `Table` | Source table name. |
+| `Position` | Replication position — LSN, GTID, or SCN depending on the database. |
+| `Meta` | Source-specific extras (e.g. Postgres relation OID, Oracle redo SQL). |
 
 ### Example Source
 ```go
-func (c *IUseConnector) FetchRecords(param *MariaSourceFetch) <-chan map[string]any {
+func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan map[string]any {
     ch := make(chan map[string]any)
 
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.Ctx.GetName() + " LIMIT 5")
+        rows, err := param.SourceDBConn.Execute("SELECT id, name FROM " + param.State.GetName() + " LIMIT 5")
         if err != nil {
             log.Println("query error:", err)
             return
         }
-        defer rows.Close()
 
-        cols, _ := rows.Columns()
-        for rows.Next() {
-            // create a slice of interface{} to hold each column value
-            vals := make([]any, len(cols))
-            ptrs := make([]any, len(cols))
-            for i := range vals {
-                ptrs[i] = &vals[i]
-            }
-
-            if err := rows.Scan(ptrs...); err != nil {
-                log.Println("scan error:", err)
-                continue
-            }
-
-            // map column names to values
+        for i := 0; i < rows.RowNumber(); i++ {
             record := map[string]any{}
-            for i, col := range cols {
-                record[col] = vals[i]
+            for j, col := range rows.Fields {
+                val, _ := rows.GetValue(i, j)
+                record[string(col.Name)] = val
             }
             ch <- record
         }
@@ -106,16 +129,23 @@ func (c *IUseConnector) FetchRecords(param *MariaSourceFetch) <-chan map[string]
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *MariaSourceQuery) (*MariaSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.Ctx.GetName())
-    return &MariaSourceQueryTune{Query: query}, nil
+func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error) {
+    query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.State.GetName())
+    return &models.MariaSourceQueryTune{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateBinLog(param *MariaSourceBinlog) (*MariaSourceBinlogTune, error) {
-    // To establish a replication connection with a unique server ID.
-    // Here we mock with a static server ID for simplicity.
-    return &MariaSourceBinlogTune{
+func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error) {
+    return &models.MariaSourceBinlogTune{
         ServerID: 1234, // unique replication client ID
+        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+            record := event.After
+            if record == nil {
+                record = event.Before
+            }
+            record["_op"] = string(event.Operation)
+            record["_table"] = event.Table
+            return record, nil
+        },
     }, nil
 }
 ```
@@ -130,14 +160,14 @@ The MariaDB destination interface provides structured data loading operations:
 
 ```go
 type IClientDBMariaDest interface {
-    GenerateQuery(param *models.MariaDestQuery) (*models.MariaDestQueryTune, error)
+    GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and UPSERT operations
-- **Batch Processing** - Efficient handling of large record sets
+- **Batch Processing** - Receives a batch of records and returns one query tune per record
 
 ### Destination Configuration Structure
 
@@ -146,55 +176,55 @@ When using MariaDB as a destination, the system uses this struct definition:
 ```go
 // Destination operations
 type MariaDestQuery struct {
-    PipelineName      string
-    Record            map[string]any
-    SourceDBConn      IDatabaseEngine
-    DestDBConn        *client.Conn
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    Records            []map[string]any
+    SourceDBConn       IDatabaseEngine
+    DestDBConn         *client.Conn
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MariaDestQueryTune struct {
-    Query           string
-    Value           []any
-    RecordsPerBatch int
+    Query string
+    Value []any
 }
 ```
 
 This structure manages:
 
-- **Pipeline Identification** - Links destination operations to specific ETL workflows
-- **Record Processing** - Handles individual data records for transformation and loading
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of data records for transformation and loading
 - **Connection Management** - Maintains source, destination, and auxiliary database connections
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) (*models.MariaDestQueryTune, error) {
-    // Example: simple INSERT query generator
-    columns := ""
-    values := ""
-    args := []any{}
+func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error) {
+    tunes := make([]*models.MariaDestQueryTune, 0, len(param.Records))
 
-    i := 0
-    for k, v := range param.Record {
-        if i > 0 {
-            columns += ", "
-            values += ", "
+    for _, rec := range param.Records {
+        cols := make([]string, 0, len(rec))
+        placeholders := make([]string, 0, len(rec))
+        args := make([]any, 0, len(rec))
+
+        for k, v := range rec {
+            cols = append(cols, k)
+            placeholders = append(placeholders, "?")
+            args = append(args, v)
         }
-        columns += k
-        values += "?"
-        args = append(args, v)
-        i++
+
+        query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+            param.State.GetName(),
+            strings.Join(cols, ", "),
+            strings.Join(placeholders, ", "),
+        )
+
+        tunes = append(tunes, &models.MariaDestQueryTune{
+            Query: query,
+            Value: args,
+        })
     }
 
-    query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-        param.Ctx.GetName(), columns, values)
-
-    return &models.MariaDestQueryTune{
-        Query:           query,
-        Value:           args,
-        RecordsPerBatch: 100, // Example batch size
-    }, nil
+    return tunes, nil
 }
 ```
 

@@ -14,12 +14,32 @@ While checkpoint hooks handle successful commits, backlog hooks are invoked when
 Your backlog function must implement the following signature:
 
 ```go
-func Backlog(param *models.IBacklogProps) (*models.BacklogTune, error)
+func Backlog(param *models.BacklogProps) (*models.BacklogTune, error)
 ```
 
 ### Parameters
 
-The `IBacklogProps` struct provides access to:
+```go
+type BacklogProps struct {
+	State              models.IPipelineRuntimeState
+	SourceDBConn       models.IDatabaseEngine
+	DestDBConn         models.IDatabaseEngine
+	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
+	Records            []map[string]any
+	FailureStage       models.FailureStage
+	Err                error
+}
+```
+
+### Return Value
+
+```go
+type BacklogTune struct {
+	Action models.PipelineAction
+}
+```
+
+### Referenced Types
 
 ```go
 type PipelineAction int
@@ -29,20 +49,21 @@ const (
 	ActionStop
 )
 
-type BacklogTune struct {
-	Action PipelineAction
-}
+type FailureStage int
 
-type IBacklogProps struct {
-    Ctx           IPipelineContextContract          // Request context for logging and operations
-    Logger        ILoggerContract                   // Logger for logging any message
-    FailureStage  FailureStage                      // Failure stage: Transformation or Destination
-    Records       []map[string]any                  // Failed data records
-    SourceDB      IDatabaseEngine                   // Source database connection
-    DestinationDB IDatabaseEngine                   // Destination database connection
-    AuxilaryDB    map[string]IDatabaseEngine        // Additional database connections
-}
+const (
+	FailureStageNone        FailureStage = iota
+	FailureStageTransform
+	FailureStageDestination
+)
 
+type IPipelineRuntimeState interface {
+	GetName() string
+	GetFlowName() string
+	GetReplicaProps() map[string]any
+	GetLogger() models.ILoggerContract
+	GetDestinationWriteBatchSize() int
+}
 ```
 
 ## Benefits of Using Backlog Hooks
@@ -57,103 +78,39 @@ import (
 	"encoding/json"
 	"etlfunnel/execution/models"
 	"etlfunnel/database/cast"
+	"fmt"
 	"time"
-
-	"go.uber.org/zap"
 )
 
-func Backlog(param *models.IBacklogProps) (*models.BacklogTune, error) {
-	param.Logger.Error("Write failure detected. Starting backlog process...",
-		zap.Int("failed_record_count", len(param.Records)),
-		zap.String("failure_stage", string(param.FailureStage)),
-	)
-
-	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxilaryDB["mysql"])
+func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
+	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
-		param.Logger.Error("Failed to cast MySQL connection for backlog", zap.Error(err))
-		// CRITICAL FAILURE: Cannot even connect to the backlog DB. STOP.
 		return nil, err
 	}
 
 	query := `
-		INSERT INTO failed_records 
+		INSERT INTO failed_records
 		(pipeline_name, record_id, record_data, failure_timestamp, retry_count, status)
 		VALUES (?, ?, ?, ?, 0, 'pending')
 	`
 
-	inserted := 0
 	for _, record := range param.Records {
 		recordJSON, _ := json.Marshal(record)
-		recordID := "<unknown>"
-		if id, ok := record["id"]; ok {
-			recordID = toString(id)
-		}
+		recordID := fmt.Sprintf("%v", record["id"])
 
 		_, err := mysqlConn.Exec(query,
-			param.Ctx.GetName(),
+			param.State.GetName(),
 			recordID,
 			string(recordJSON),
 			time.Now().UTC(),
 		)
-
 		if err != nil {
-			param.Logger.Error("Failed to store backlog record", zap.String("record_id", recordID), zap.Error(err))
 			continue
 		}
-
-		inserted++
-		updateFailureStats(mysqlConn, param.Ctx.GetName())
-
-		if isCriticalRecord(record) {
-			sendFailureAlert(param, record, param.Ctx.GetName())
-		}
 	}
 
-	param.Logger.Info("Backlog process completed.",
-		zap.Int("total_failed", len(param.Records)),
-		zap.Int("successfully_backlogged", inserted),
-	)
-
-	// Continue pipeline even if some records failed to backlog
 	return &models.BacklogTune{Action: models.ActionContinue}, nil
 }
-
-func updateFailureStats(conn any, pipelineName string) {
-	query := `
-		INSERT INTO pipeline_failure_stats (pipeline_name, last_failure_time, failure_count)
-		VALUES (?, ?, 1)
-		ON DUPLICATE KEY UPDATE
-		last_failure_time = VALUES(last_failure_time),
-		failure_count = failure_count + 1
-	`
-	conn.Exec(query, pipelineName, time.Now().UTC())
-}
-
-func isCriticalRecord(record map[string]any) bool {
-	if priority, ok := record["priority"].(string); ok {
-		return priority == "critical" || priority == "high"
-	}
-	return false
-}
-
-func sendFailureAlert(param *models.IBacklogProps, record map[string]any, pipeline string) {
-	param.Logger.Error("Critical record failure alert",
-		zap.String("pipeline", pipeline),
-		zap.Any("record", record),
-	)
-}
-
-func toString(v any) string {
-	switch val := v.(type) {
-	case string:
-		return val
-	case []byte:
-		return string(val)
-	default:
-		return fmt.Sprintf("%v", val)
-	}
-}
-
 ```
 
 ## Creating a Backlog Hook

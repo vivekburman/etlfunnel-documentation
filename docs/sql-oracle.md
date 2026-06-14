@@ -29,24 +29,24 @@ When configuring Oracle as a source database, the system uses these struct defin
 ```go
 // Source operations
 type OracleSourceFetch struct {
-    PipelineName      string
-    SourceDBConn      *sql.DB
-    AuxilaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn        IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *sql.DB
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
 }
 
 type OracleSourceQuery struct {
-    PipelineName      string
-    SourceDBConn      *sql.DB
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *sql.DB
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type OracleSourceCDC struct {
-    PipelineName      string
-    SourceDBConn      *sql.DB
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *sql.DB
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type OracleSourceQueryTune struct {
@@ -56,42 +56,79 @@ type OracleSourceQueryTune struct {
 }
 
 type OracleSourceCDCTune struct {
-    SourceTables           []string
-    SCNType                string
-    StartSCN               uint64
+    ParseFn                func(ChangeEvent) (map[string]any, error)
     StartTime              time.Time
-    ExtractionMode         string
+    SourceTables           []string
     IncludeOperations      []string
-    BatchSize              int
-    PollingInterval        time.Duration
+    SCNType                string
     SessionRefreshMode     string
+    ExtractionMode         string
+    PollingInterval        time.Duration
     SessionRefreshInterval time.Duration
+    RetryJitter            float64
+    StartSCN               uint64
+    BatchSize              int
     SessionRefreshCount    int
     MaxRetries             int
     BaseRetryDelayMs       int
     MaxRetryDelayMs        int
-    RetryJitter            float64
 }
 ```
 
 These structures provide:
 
-- **Pipeline Name** - Unique identifier for the ETL operation
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct Oracle connection instance for data extraction
 - **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Advanced CDC Configuration** - Comprehensive change data capture settings with SCN management, retry logic, and session handling
+- **CDC ParseFn** - Controls how raw Oracle change events are shaped into pipeline records
+
+### ChangeEvent
+
+`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+
+```go
+type ChangeEvent struct {
+    Before    map[string]any
+    After     map[string]any
+    Meta      map[string]any
+    Operation ChangeEventOperation
+    Database  string
+    Table     string
+    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+}
+
+type ChangeEventOperation string
+
+const (
+    ChangeEventOpInsert ChangeEventOperation = "INSERT"
+    ChangeEventOpUpdate ChangeEventOperation = "UPDATE"
+    ChangeEventOpDelete ChangeEventOperation = "DELETE"
+    ChangeEventOpDDL    ChangeEventOperation = "DDL"
+)
+```
+
+| Field | Description |
+|-------|-------------|
+| `Before` | Row state before the change. Set for `UPDATE` and `DELETE`; `nil` for `INSERT` and `DDL`. |
+| `After` | Row state after the change. Set for `INSERT` and `UPDATE`; `nil` for `DELETE` and `DDL`. |
+| `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
+| `Database` | Source database name. |
+| `Table` | Source table name. |
+| `Position` | Oracle SCN at the time of the change. |
+| `Meta` | Oracle-specific extras (e.g. redo/undo SQL). |
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *OracleSourceFetch) <-chan map[string]any {
+func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan map[string]any {
     ch := make(chan map[string]any)
 
     go func() {
         defer close(ch)
 
-        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.Ctx.GetName() + " WHERE ROWNUM <= 5")
+        rows, err := param.SourceDBConn.Query("SELECT id, name FROM " + param.State.GetName() + " WHERE ROWNUM <= 5")
         if err != nil {
             log.Println("query error:", err)
             return
@@ -122,29 +159,38 @@ func (c *IUseConnector) FetchRecords(param *OracleSourceFetch) <-chan map[string
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *OracleSourceQuery) (*OracleSourceQueryTune, error) {
-    query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.Ctx.GetName())
-    return &OracleSourceQueryTune{
+func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error) {
+    query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.State.GetName())
+    return &models.OracleSourceQueryTune{
         Query:           query,
         RecordsPerBatch: 1000,
         PrefetchSize:    100,
     }, nil
 }
 
-func (c *IUseConnector) GenerateCDC(param *OracleSourceCDC) (*OracleSourceCDCTune, error) {
-    return &OracleSourceCDCTune{
-        SourceTables:           []string{param.Ctx.GetName()},
+func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error) {
+    return &models.OracleSourceCDCTune{
+        SourceTables:           []string{param.State.GetName()},
         SCNType:                "CURRENT",
         ExtractionMode:         "HOTLOG",
         IncludeOperations:      []string{"INSERT", "UPDATE", "DELETE"},
         BatchSize:              100,
-        PollingInterval:        time.Second * 5,
+        PollingInterval:        5 * time.Second,
         SessionRefreshMode:     "TIME_BASED",
-        SessionRefreshInterval: time.Minute * 30,
+        SessionRefreshInterval: 30 * time.Minute,
         MaxRetries:             3,
         BaseRetryDelayMs:       500,
         MaxRetryDelayMs:        10000,
         RetryJitter:            0.3,
+        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+            record := event.After
+            if record == nil {
+                record = event.Before
+            }
+            record["_op"] = string(event.Operation)
+            record["_scn"] = event.Position
+            return record, nil
+        },
     }, nil
 }
 ```
@@ -159,14 +205,14 @@ The Oracle destination interface provides structured data loading operations:
 
 ```go
 type IClientDBOracleDest interface {
-    GenerateQuery(param *models.OracleDestQuery) (*models.OracleDestQueryTune, error)
+    GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and MERGE operations
-- **Batch Processing** - Efficient handling of large record sets with Oracle-specific optimizations
+- **Batch Processing** - Receives a batch of records and returns one query tune per record
 
 ### Destination Configuration Structure
 
@@ -175,55 +221,59 @@ When using Oracle as a destination, the system uses this struct definition:
 ```go
 // Destination operations
 type OracleDestQuery struct {
-    PipelineName      string
-    Record            map[string]any
-    SourceDBConn      IDatabaseEngine
-    DestDBConn        *sql.DB
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    Records            []map[string]any
+    SourceDBConn       IDatabaseEngine
+    DestDBConn         *sql.DB
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type OracleDestQueryTune struct {
-    Query           string
-    Value           []any
-    RecordsPerBatch int
+    Query string
+    Value []any
 }
 ```
 
 This structure manages:
 
-- **Pipeline Identification** - Links destination operations to specific ETL workflows
-- **Record Processing** - Handles individual data records for transformation and loading
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of data records for transformation and loading
 - **Connection Management** - Maintains source, destination, and auxiliary database connections
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) (*models.OracleDestQueryTune, error) {
-    columns := ""
-    values := ""
-    args := []any{}
+func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error) {
+    tunes := make([]*models.OracleDestQueryTune, 0, len(param.Records))
 
-    i := 0
-    for k, v := range param.Record {
-        if i > 0 {
-            columns += ", "
-            values += ", "
+    for i, rec := range param.Records {
+        cols := make([]string, 0, len(rec))
+        placeholders := make([]string, 0, len(rec))
+        args := make([]any, 0, len(rec))
+
+        j := 1
+        for k, v := range rec {
+            cols = append(cols, k)
+            placeholders = append(placeholders, ":v"+strconv.Itoa(j))
+            args = append(args, v)
+            j++
         }
-        columns += k
-        values += ":v" + strconv.Itoa(i+1)
-        args = append(args, v)
-        i++
+
+        query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+            param.State.GetName(),
+            strings.Join(cols, ", "),
+            strings.Join(placeholders, ", "),
+        )
+
+        tunes = append(tunes, &models.OracleDestQueryTune{
+            Query: query,
+            Value: args,
+        })
+        _ = i
     }
 
-    query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-        param.Ctx.GetName(), columns, values)
-
-    return &models.OracleDestQueryTune{
-        Query:           query,
-        Value:           args,
-        RecordsPerBatch: 1000,
-    }, nil
+    return tunes, nil
 }
 ```
 

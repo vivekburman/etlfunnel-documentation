@@ -4,7 +4,7 @@ ETLFunnel is built around a clean separation between two planes of execution: th
 
 ## The Two Planes
 
-Most ETL tools give you a single flat model — configure a source, configure a destination, define some transforms, run it. ETLFunnel divides that into two distinct layers that operate at different levels of the pipeline lifecycle.
+ETLFunnel divides pipeline execution into two distinct layers that operate at different levels of the pipeline lifecycle.
 
 <img src="img/pipeline_architecture.svg" alt="Pipeline" height="300" />
 ---
@@ -60,6 +60,9 @@ The Control Plane is everything that shapes **how the pipeline runs**, operating
 
 **Orchestrator**  
 Runs as a pre-step, before any data flows. Given a set of pipeline entities, it decides how many replicas should exist and what parameters each replica gets. This is where you implement hardware-aware scaling (split by CPU cores) or data-aware partitioning (split a 100M-row table into 4 parallel workers). The data plane runs *inside* each replica the orchestrator produces.
+
+**Destination Write Rule**  
+A control-plane hook that lets you dynamically adjust the number of records written to the destination per batch while the pipeline is actively running. Rather than committing to a fixed batch size at startup, you can respond in real time to throughput signals, idle periods, or any external condition. The hook runs on its own independent ticker and never blocks the main record-processing loop.
 
 **User Libraries**  
 Shared Go code — constants, validators, API clients, helper functions — that lives in a centralized workspace and is importable by any hook across any pipeline. Not per-record logic itself, but the utilities that per-record logic depends on.
@@ -120,6 +123,7 @@ Imagine you're building a real-time sync from a PostgreSQL production database t
 - **Source Connector Entity**: generates a `SELECT` query or WAL slot to stream rows from Postgres
 - **Transformer**: normalizes field names, hashes PII, enriches with lookup data from a Redis auxiliary DB
 - **Destination Connector Entity**: generates the Elasticsearch index operation for each document
+- **Destination Write Rule**: starts at batch size 50; scales up to 200 during high-throughput bursts and drops to 1 during idle periods to flush held records promptly without waiting for the batch to fill
 - **Checkpoint**: writes the last processed `updated_at` timestamp to a tracking table so restarts resume mid-stream
 - **Backlog**: on write failure, inserts the failed document into a `failed_records` MySQL table for retry
 - **Termination Rule**: not used here — batch pipeline, exits naturally when the query is exhausted

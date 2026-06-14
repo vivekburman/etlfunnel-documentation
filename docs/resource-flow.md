@@ -8,9 +8,12 @@ A **Flow** represents the logical unit of work in your ETL operations. Think of 
 
 Each flow consists of:
 
-- **1 Source Database** - The origin of your data
-- **1 Destination Database** - Where processed data lands
+- **1 Primary Source** - The origin connector for your data
+- **1 Destination** - The target connector where processed data lands
 - **Multiple Pipelines** - Individual data transformation workflows
+- **Orchestrator** - Controls pipeline scheduling and execution order
+- **Setup Fixture** - Code that runs once before the flow starts
+- **Teardown Fixture** - Code that runs once after the flow completes
 
 ## Pipeline Components
 
@@ -18,37 +21,14 @@ Within each flow, every pipeline contains:
 
 | Component | Description | Quantity |
 |-----------|-------------|----------|
-| **Name** | Unique identifier for the pipeline | 1 |
-| **Source Entity** | Origin data structure (e.g., `users` table) | 1 |
-| **Destination Entity** | Target data structure (e.g., `user_index` in Elasticsearch) | 1 |
-| **Transformers** | Data processing and transformation logic | Any number |
-| **Checkpoint** | Progress tracking and recovery point | 1 |
-| **Backlog** | Hook for failed records | 1 |
-| **Auxiliary DBs** | Supporting databases for lookups or enrichment | Any number |
+| **Name** | Display name for the pipeline | 1 |
+| **Base Name** | Anchor entity name this pipeline is built around. Acts as a placeholder so multiple sharded variants can be derived from it — e.g. a base name of `user_activity` allows the pipeline to target `user_activity_1`, `user_activity_2`, etc. | 1 |
+| **Source Isolation Entity** | Connector entity defining the source data scope for this pipeline | 1 |
+| **Destination Isolation Entity** | Connector entity defining the destination target for this pipeline | 1 |
+| **Transformers** | Ordered list of data transformation hooks applied to each record | Any number |
+| **Checkpoint** | Progress tracking hook — saves state so the pipeline can resume after interruption | 0 or 1 |
+| **Backlog** | Hook invoked for records that fail processing, enabling retry or dead-letter handling | 0 or 1 |
+| **Terminate** | Hook that decides whether to stop the pipeline early based on custom logic | 0 or 1 |
+| **Destination Write Rule** | Hook that tunes bulk write behaviour — controls records per batch, check interval, and an optional custom check function to dynamically adjust throughput at runtime | 0 or 1 |
+| **Auxiliary Hubs** | Additional connector hubs available inside the pipeline for lookups or enrichment | Any number |
 
-## Example Flow Definition
-
-Here's a practical example of defining a flow for user data synchronization:
-
-### Flow Setup
-1. **Flow Name**: `User Sync Flow`
-2. **Source Database**: 
-   - Type: `PostgreSQL`
-   - Connection: `prod_postgres`
-3. **Destination Database**: 
-   - Type: `Elasticsearch`
-   - Connection: `search_cluster`
-
-### Pipeline Configuration
-**Pipeline Name**: `User Profile Sync`
-
-| Setting | Value |
-|---------|-------|
-| Source Entity | `users` (table) |
-| Destination Entity | `user_profiles_index` |
-| Transformers | • Email Hash Transformer<br/>• PII Anonymizer<br/>• Profile Enricher |
-| Checkpoint | `user_sync_checkpoint` |
-| Backlog | `failed_user_records` |
-| Auxiliary DBs | • `user_preferences` (lookup)<br/>• `redis_session_store` (cache) |
-
-This flow efficiently manages user data synchronization from a PostgreSQL database to an Elasticsearch cluster, with built-in error handling and data transformation capabilities.

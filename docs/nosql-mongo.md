@@ -31,31 +31,31 @@ When configuring MongoDB as a source database, the system uses these struct defi
 ```go
 // Source operations
 type MongoSourceFetch struct {
-    PipelineName      string
-    SourceDBConn      *mongo.Client
-    AuxilaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn        IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *mongo.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    DestDBConn         IDatabaseEngine
 }
 
 type MongoSourceQuery struct {
-    PipelineName      string
-    SourceDBConn      *mongo.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *mongo.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoSourceStreams struct {
-    PipelineName      string
-    SourceDBConn      *mongo.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *mongo.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoSourceOplog struct {
-    PipelineName      string
-    SourceDBConn      *mongo.Client
-    DestDBConn        IDatabaseEngine
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    SourceDBConn       *mongo.Client
+    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoSourceQueryTune struct {
@@ -75,7 +75,7 @@ type MongoSourceOplogTune struct {
 
 These structures provide:
 
-- **Pipeline Name** - Unique identifier for the ETL operation, typically corresponding to collection name
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - MongoDB client instance for document extraction
 - **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
@@ -84,13 +84,13 @@ These structures provide:
 ### Example Source Implementation
 
 ```go
-func (c *IUseConnector) FetchRecords(param *MongoSourceFetch) <-chan map[string]any {
+func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan map[string]any {
     ch := make(chan map[string]any)
 
     go func() {
         defer close(ch)
 
-        collection := param.SourceDBConn.Database("etl").Collection(param.Ctx.GetName())
+        collection := param.SourceDBConn.Database("etl").Collection(param.State.GetName())
         cursor, err := collection.Find(context.TODO(), bson.M{}, options.Find().SetLimit(5))
         if err != nil {
             log.Println("find error:", err)
@@ -111,46 +111,43 @@ func (c *IUseConnector) FetchRecords(param *MongoSourceFetch) <-chan map[string]
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *MongoSourceQuery) (*MongoSourceQueryTune, error) {
-    // Example aggregation pipeline to get recent documents
+func (c *IUseConnector) GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error) {
     pipeline := bson.D{
         {"$match", bson.M{"status": "active"}},
         {"$sort", bson.M{"created_at": -1}},
         {"$limit", 10},
     }
-    return &MongoSourceQueryTune{CommandDoc: pipeline}, nil
+    return &models.MongoSourceQueryTune{CommandDoc: pipeline}, nil
 }
 
-func (c *IUseConnector) GenerateStream(param *MongoSourceStreams) (*MongoStreamsTune, error) {
-    // Configure change stream with filters
+func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error) {
     pipeline := []bson.M{
         {"$match", bson.M{"operationType": bson.M{"$in": []string{"insert", "update"}}}},
     }
-    
-    options := options.ChangeStream().
+
+    opts := options.ChangeStream().
         SetFullDocument("updateLookup").
         SetBatchSize(100)
-    
-    return &MongoStreamsTune{
-        ChangeStreamOptions: *options,
-        Pipeline:           pipeline,
+
+    return &models.MongoStreamsTune{
+        ChangeStreamOptions: *opts,
+        Pipeline:            pipeline,
     }, nil
 }
 
-func (c *IUseConnector) GenerateOplogTrailing(param *MongoSourceOplog) (*MongoSourceOplogTune, error) {
-    // Configure oplog tailing with timestamp filter
+func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error) {
     filter := bson.M{
         "ts": bson.M{"$gte": time.Now().Add(-1 * time.Hour)},
-        "ns": bson.M{"$regex": "^etl\\." + param.Ctx.GetName()},
+        "ns": bson.M{"$regex": "^etl\\." + param.State.GetName()},
     }
-    
-    options := options.Find().
+
+    opts := options.Find().
         SetSort(bson.M{"$natural": 1}).
         SetNoCursorTimeout(true)
-    
-    return &MongoSourceOplogTune{
+
+    return &models.MongoSourceOplogTune{
         Filter:  filter,
-        Options: *options,
+        Options: *opts,
     }, nil
 }
 ```
@@ -165,7 +162,7 @@ The MongoDB destination interface provides structured document loading operation
 
 ```go
 type IClientDBMongoDest interface {
-    GenerateQuery(param *models.MongoDestQuery) (*models.MongoDestQueryTune, error)
+    GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error)
 }
 ```
 
@@ -193,16 +190,16 @@ const (
 )
 
 type MongoDBWriteOptions struct {
-    Upsert           bool
-    WriteConcern     *writeconcern.WriteConcern
-    Ordered          bool
-    BypassValidation bool
     Comment          any
-    ArrayFilters     []any
     Hint             any
     Sort             any
     Let              any
+    WriteConcern     *writeconcern.WriteConcern
     Collation        *options.Collation
+    ArrayFilters     []any
+    Upsert           bool
+    Ordered          bool
+    BypassValidation bool
 }
 ```
 
@@ -213,61 +210,59 @@ When using MongoDB as a destination, the system uses this struct definition:
 ```go
 // Destination operations
 type MongoDestQuery struct {
-    PipelineName      string
-    Record            map[string]any
-    SourceDBConn      IDatabaseEngine
-    DestDBConn        *mongo.Client
-    AuxilaryDBConnMap map[string]IDatabaseEngine
+    State              IPipelineRuntimeState
+    Records            []map[string]any
+    SourceDBConn       IDatabaseEngine
+    DestDBConn         *mongo.Client
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoDestQueryTune struct {
-    Operation        MongoWriteOperationType
-    Filter           bson.M
-    Document         bson.M
-    Options          MongoDBWriteOptions
-    RecordsPerBatch  int
+    Options   MongoDBWriteOptions
+    Query     any // filter document (e.g. bson.M{"_id": id})
+    Payload   any // document to write or update
+    Operation MongoWriteOperationType
 }
 ```
 
 This structure manages:
 
-- **Pipeline Identification** - Links destination operations to specific ETL workflows
-- **Document Processing** - Handles BSON document records for transformation and loading
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of BSON document records for transformation and loading
 - **Connection Management** - Maintains source, destination, and auxiliary database connections
 - **Operation Configuration** - Specifies write operation type and associated options
 
 ### Example Destination Implementation
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) (*models.MongoDestQueryTune, error) {
-    // Convert map[string]any to bson.M for MongoDB operations
-    document := bson.M{}
-    for k, v := range param.Record {
-        document[k] = v
+func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error) {
+    tunes := make([]*models.MongoDestQueryTune, 0, len(param.Records))
+
+    for _, rec := range param.Records {
+        document := bson.M{}
+        for k, v := range rec {
+            document[k] = v
+        }
+
+        filter := bson.M{}
+        if id, exists := document["_id"]; exists {
+            filter["_id"] = id
+            delete(document, "_id")
+        }
+
+        tunes = append(tunes, &models.MongoDestQueryTune{
+            Operation: models.MongoWriteUpdateOne,
+            Query:     filter,
+            Payload:   document,
+            Options: models.MongoDBWriteOptions{
+                Upsert:       true,
+                WriteConcern: writeconcern.W1(),
+                Ordered:      true,
+            },
+        })
     }
 
-    // Example: INSERT_ONE operation with upsert capability
-    options := MongoDBWriteOptions{
-        Upsert:           true,
-        WriteConcern:     writeconcern.W1(),
-        BypassValidation: false,
-        Ordered:          true,
-    }
-
-    // Use _id field for upsert filter if present
-    filter := bson.M{}
-    if id, exists := document["_id"]; exists {
-        filter["_id"] = id
-        delete(document, "_id") // Remove from update document
-    }
-
-    return &models.MongoDestQueryTune{
-        Operation:       MongoWriteInsertOne,
-        Filter:          filter,
-        Document:        document,
-        Options:         options,
-        RecordsPerBatch: 100,
-    }, nil
+    return tunes, nil
 }
 ```
 

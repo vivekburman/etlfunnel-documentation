@@ -1,16 +1,23 @@
 # What is ETLFunnel?
 
-ETLFunnel is a **developer-first, on-premise ETL platform** that gives engineering teams full ownership of their data pipelines — the logic, the infrastructure, and the execution environment — without depending on managed cloud services or black-box SaaS tooling.
+ETLFunnel is a **developer-first, self-hosted data pipeline management platform** that gives engineering teams full ownership of their data pipelines — the logic, the infrastructure, and the execution environment — without depending on managed cloud services or black-box SaaS tooling.
 
 ---
 
 ## The Problem It Solves
 
-Modern data teams are stuck between two bad options.
+Modern data teams are stuck between two options.
 
-**Managed ETL services** — cloud-hosted pipelines and drag-and-drop tools — are fast to start but quickly hit a ceiling. Custom business logic gets bolted on awkwardly. You can't control where your data goes during transit. Pricing scales with volume in ways that hurt. And when something breaks deep inside the platform, you're filing a support ticket instead of reading a stack trace.
+**Managed ETL services** — cloud-hosted pipelines and drag-and-drop tools:
+- Fast to start but quickly hit a ceiling
+- Custom business logic gets bolted on awkwardly
+- No control over where your data goes during transit
+- Pricing scales with volume in ways that hurt
+- When something breaks deep inside the platform, you're filing a support ticket instead of reading a stack trace
 
-**Rolling your own** means gluing together consumers, workers, retry queues, and monitoring — an enormous surface area to build and maintain before you've moved a single byte of business data.
+**Rolling your own:**
+- Requires gluing together consumers, workers, retry queues, and monitoring
+- An enormous surface area to build and maintain before you've moved a single byte of business data
 
 ETLFunnel sits in between. It gives you a **structured runtime** for data pipelines — connection management, execution scheduling, parallelism, failure handling, progress tracking — while leaving every piece of business logic as code you own, version, and deploy.
 
@@ -27,7 +34,7 @@ ETLFunnel is built for engineering teams that need to:
 
 ---
 
-## On-Premise by Design
+## Self-Hosted by Design
 
 ETLFunnel installs on your own infrastructure. There is no cloud dependency, no data leaving your network, and no per-record pricing. This matters for teams with:
 
@@ -45,7 +52,7 @@ The core architectural decision in ETLFunnel is the separation of the **manageme
 <img src="img/server_runner_architecture.svg" alt="Server Runner" height="300" />
 
 
-**The Server** is the control center. It hosts the web interface where you define pipelines, configure connections, schedule builds, and view logs. You run one server per workspace.
+**The Server** is the control center. It hosts the web interface where you define pipelines, configure connections, schedule builds, and view logs.
 
 **Runners** are lightweight agents that do the actual work. A runner registers with the server using an API key, receives assigned jobs, and executes them locally — the runner is the process that opens database connections and moves data. You can deploy runners anywhere: on a database host for low-latency access, inside a specific network zone for compliance, or on a dedicated compute machine for throughput-heavy workloads.
 
@@ -60,20 +67,32 @@ The server coordinates. The runners execute. Your data never has to leave the en
 
 ---
 
-## What You Build, What ETLFunnel Provides
+## What You Work With
 
-| You provide | ETLFunnel provides |
-|-------------|-------------------|
-| Transformation logic (Go functions) | Pipeline execution runtime |
-| Source / destination query logic | Connection pooling and management |
-| Checkpoint and recovery strategy | Automatic lifecycle orchestration |
-| Failure handling logic | Parallel execution across runners |
-| Business rules and filters | Build scheduling (run now / cron) |
-| Shared utility libraries | Log aggregation and monitoring |
-| | Retry and exponential backoff |
-| | Web UI for pipeline management |
+Everything you configure lives in one of five areas:
 
-The division is intentional. ETLFunnel handles the hard operational problems — concurrency, retries, scheduling, lifecycle management — so your team focuses on logic specific to your data and your business.
+**Builder**
+- Hub — your central hub for data connections. Manage both source connectors (data in) and destination connectors (data out) for your pipelines.
+- Flow — build automated data workflows. Connect sources, transform data, and deliver it to your destinations on schedule.
+- Collection — group related workflows into organised collections. Categorise similar flows and streamline collaboration across your data integration processes.
+
+**Data Plane**
+- Relational DB — connect to MySQL, MariaDB, PostgreSQL, Microsoft SQL Server, and Oracle Database.
+- Non-Relational DB — connect to Redis, MongoDB, Elasticsearch, Kafka, RabbitMQ, and Cassandra.
+- API — connect to any REST API. Add and manage HTTP connections for sourcing or delivering data across your pipelines.
+- Transformer — build your data transformation logic. Create and manage reusable transformers to clean, validate, enrich, and restructure data in your pipelines.
+- User Library — build your custom function library. Create and manage reusable Go functions to use across your pipelines.
+
+**Control Plane**
+- Orchestrator — build your orchestration logic. Design and automate flow execution, enabling scaling, load distribution, and adaptive pipeline management.
+- Fixture — define setup and teardown logic that runs before a pipeline, flow, or collection is picked and after it completes.
+- Destination Rule — control how records are delivered to your destination. Configure batch size, flush intervals, and custom write conditions to tune throughput and reliability.
+- Termination Rule — define when the pipeline should stop processing. Set limits based on record count, idle time, total runtime, or custom conditions.
+- Save Checkpoint — save pipeline progress at key stages. Recover from failures and resume data processing without starting over.
+- Incident Backlog — track failed data transfers. Collect, investigate, and retry records that couldn't reach their destination.
+
+**Integrations**
+- Webhook — connect your pipelines with real-time alerts. Trigger actions in external services when pipeline events occur.
 
 ---
 

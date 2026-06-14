@@ -33,26 +33,48 @@ You can define hooks at two levels:
 
 ETLFunnel's engine defines an orchestration contract:
 
+Flow and pipeline orchestration use separate types. Each item exposes the database connections for the unit being replicated, and the tune structs tell the engine how to name and configure each replica.
+
 ```go
-type OrchestratorEntityDef struct {
-    Name string
-    SourceDBConn IDatabaseEngine
-    DestDBConn IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+// Flow-level types
+type FlowOrchestratorItemProps struct {
+	Name               string
+	SourceDBConn       IDatabaseEngine
+	DestDBConn         IDatabaseEngine
+	AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type OrchestratorProps struct {
-    Entity []OrchestratorEntityDef
+type FlowOrchestratorProps struct {
+	Flows []FlowOrchestratorItemProps
 }
 
-type OrchestratorTune struct {
-    ParentEntityName string
-    NewEntityName string
-    ReplicaProps map[string]any
+type FlowOrchestratorTune struct {
+	ParentName   string
+	ReplicaName  string
+	ReplicaProps map[string]any
+}
+
+// Pipeline-level types
+type PipelineOrchestratorItemProps struct {
+	Name               string
+	EntityBaseName     string
+	SourceDBConn       IDatabaseEngine
+	DestDBConn         IDatabaseEngine
+	AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+
+type PipelineOrchestratorProps struct {
+	Pipelines []PipelineOrchestratorItemProps
+}
+
+type PipelineOrchestratorTune struct {
+	ParentName   string
+	ReplicaName  string
+	ReplicaProps map[string]any
 }
 ```
 
-The idea is simple: each entity represents a pipeline unit, and the orchestrator decides how many replicas to create and what their tuning parameters should be.
+The pipeline variant carries an extra `EntityBaseName` — the base entity anchor (e.g. `user_activity`) from which sharded replicas like `user_activity_1`, `user_activity_2` are derived.
 
 ### Flow-level orchestration — scale by CPU
 
@@ -63,88 +85,65 @@ import (
     "runtime"
 )
 
-func GetFlowOrchestration(param *models.OrchestratorProps) ([]models.OrchestratorTune, error) {
-    // Dynamically detect available CPU cores
+func GetFlowOrchestration(param *models.FlowOrchestratorProps) ([]models.FlowOrchestratorTune, error) {
     numThreads := runtime.NumCPU()
-    
-    var replicas []models.OrchestratorTune
-    
-    for _, entity := range param.Entity {
+
+    var replicas []models.FlowOrchestratorTune
+
+    for _, flow := range param.Flows {
         for i := 0; i < numThreads; i++ {
-            replica := models.OrchestratorTune{
-                ParentEntityName: entity.Name,
-                NewEntityName: fmt.Sprintf("%s_core_%d", entity.Name, i),
+            replicas = append(replicas, models.FlowOrchestratorTune{
+                ParentName:  flow.Name,
+                ReplicaName: fmt.Sprintf("%s_core_%d", flow.Name, i),
                 ReplicaProps: map[string]any{
-                    "replica_id": i,
-                    "thread_id": i,
+                    "replica_id":     i,
                     "total_replicas": numThreads,
-                    "cpu_optimized": true,
+                    "cpu_optimized":  true,
                 },
-            }
-            replicas = append(replicas, replica)
+            })
         }
     }
-    
+
     return replicas, nil
 }
 ```
 
-This is a hardware-aware orchestration. Each pipeline replica maps to a CPU core, so your ETL workload scales automatically with the available cores on that node.
+This is a hardware-aware orchestration. Each flow replica maps to a CPU core, so your ETL workload scales automatically with the available cores on that node.
 
-### Pipeline-level orchestration — scale by data volume
+### Pipeline-level orchestration — scale by shard
 
-You can use your `SourceDBConn` (which implements `IDatabaseEngine`) to introspect data size and partition the workload accordingly.
+Pipeline orchestration uses `EntityBaseName` to derive replica entity names, making it natural for sharded or partitioned tables.
 
 ```go
-package client_orchestrator_pipeline
-
 import (
     "etlfunnel/execution/models"
     "fmt"
 )
 
-func GetPipelineOrchestration(param *models.OrchestratorProps) ([]models.OrchestratorTune, error) {
-    if param == nil {
-        return nil, fmt.Errorf("orchestrator props cannot be nil")
-    }
-    
-    var replicas []models.OrchestratorTune
-    
-    for _, entity := range param.Entity {
-        // Example: fetch table stats using your IDatabaseEngine
-        stats, err := entity.SourceDBConn.GetTableStats()
-        if err != nil {
-            return nil, fmt.Errorf("failed to fetch stats for %s: %v", entity.Name, err)
-        }
-        
-        // Split pipelines based on total row count
-        numReplicas := 1
-        if stats.TotalRows > 10_000_000 {
-            numReplicas = 4
-        } else if stats.TotalRows > 1_000_000 {
-            numReplicas = 2
-        }
-        
-        for i := 0; i < numReplicas; i++ {
-            replica := models.OrchestratorTune{
-                ParentEntityName: entity.Name,
-                NewEntityName: fmt.Sprintf("%s_partition_%d", entity.Name, i),
+func GetPipelineOrchestration(param *models.PipelineOrchestratorProps) ([]models.PipelineOrchestratorTune, error) {
+    var replicas []models.PipelineOrchestratorTune
+
+    for _, pipeline := range param.Pipelines {
+        numShards := 4 // determine dynamically based on data volume
+
+        for i := 0; i < numShards; i++ {
+            replicas = append(replicas, models.PipelineOrchestratorTune{
+                ParentName:  pipeline.Name,
+                ReplicaName: fmt.Sprintf("%s_%d", pipeline.EntityBaseName, i),
                 ReplicaProps: map[string]any{
-                    "replica_id": i,
-                    "total_replicas": numReplicas,
-                    "partition_hint": fmt.Sprintf("split_%d", i),
-                    "data_driven": true,
+                    "replica_id":     i,
+                    "total_replicas": numShards,
+                    "shard_index":    i,
                 },
-            }
-            replicas = append(replicas, replica)
+            })
         }
     }
-    
+
     return replicas, nil
 }
 ```
 
-Now orchestration adapts not just to the machine, but also to the data itself. A pipeline that needs to move 100M rows automatically gets partitioned into multiple smaller replicas, each handling a subset.
+Now orchestration adapts not just to the machine, but also to the data itself. A pipeline anchored to `user_activity` automatically fans out into `user_activity_0`, `user_activity_1`, etc., each handling a distinct shard.
 
 ## Combined: Flow + Pipeline Orchestration
 

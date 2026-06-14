@@ -7,14 +7,22 @@ A **Connector Entity** is a logical unit within a connector that represents a sp
 Before diving into Connector Entities, it's important to understand the broader connector ecosystem. There are two main types of connectors:
 
 ### 1. Relational Database Connectors
-- PostgreSQL
 - MySQL
+- MariaDB
+- PostgreSQL
 - Microsoft SQL Server
 - Oracle Database
 
 ### 2. Non-Relational Database Connectors
-- MongoDB
 - Redis
+- MongoDB
+- Elasticsearch
+- Cassandra
+- RabbitMQ
+- Kafka
+
+### 3. API Connectors
+- REST API
 
 Each connector can function as either:
 - **Source**: Extracts data from the system

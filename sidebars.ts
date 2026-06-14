@@ -30,6 +30,7 @@ const sidebars: SidebarsConfig = {
             label: 'Control Plane',
             items: [
                 'resource-orchestrator',
+                'fixture',
                 'destination-write-tune-hook',
                 'termination-rule-hook',
                 'checkpoint-hook',
@@ -64,9 +65,19 @@ const sidebars: SidebarsConfig = {
                     type: 'category',
                     label: 'Non-Relational DB',
                     items: [
+                        'nosql-cassandra',
                         'nosql-elasticsearch',
+                        'nosql-kafka',
                         'nosql-mongo',
                         'nosql-redis',
+                    ],
+                },
+                {
+                    collapsed: false,
+                    type: 'category',
+                    label: 'APIs',
+                    items: [
+                        'restapi',
                     ],
                 },
             ],
