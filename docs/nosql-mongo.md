@@ -15,7 +15,7 @@ type IClientDBMongoSource interface {
     GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error)
     GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error)
     GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error)
-    FetchRecords(param *models.MongoSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.MongoSourceFetch) <-chan *models.Record
 }
 ```
 
@@ -34,27 +34,20 @@ type MongoSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *mongo.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type MongoSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoSourceStreams struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type MongoSourceOplog struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -63,29 +56,31 @@ type MongoSourceQueryTune struct {
 }
 
 type MongoStreamsTune struct {
+    Collection          string
     ChangeStreamOptions options.ChangeStreamOptionsBuilder
     Pipeline            []bson.M
 }
 
 type MongoSourceOplogTune struct {
-    Filter  bson.M
-    Options options.FindOptionsBuilder
+    Collection string
+    Filter     bson.M
+    Options    options.FindOptionsBuilder
 }
 ```
 
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - MongoDB client instance for document extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - MongoDB client instance for document extraction, available on `MongoSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BSON Command Documents** - Native MongoDB query format for flexible document operations
+- **Collection** - `MongoStreamsTune` and `MongoSourceOplogTune` each carry the target collection name alongside their filter/pipeline
 
 ### Example Source Implementation
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -104,7 +99,7 @@ func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan map[
                 log.Println("decode error:", err)
                 continue
             }
-            ch <- document
+            ch <- &models.Record{Data: document}
         }
     }()
 
@@ -130,6 +125,7 @@ func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*model
         SetBatchSize(100)
 
     return &models.MongoStreamsTune{
+        Collection:          param.State.GetName(),
         ChangeStreamOptions: *opts,
         Pipeline:            pipeline,
     }, nil
@@ -146,8 +142,9 @@ func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*
         SetNoCursorTimeout(true)
 
     return &models.MongoSourceOplogTune{
-        Filter:  filter,
-        Options: *opts,
+        Collection: param.State.GetName(),
+        Filter:     filter,
+        Options:    *opts,
     }, nil
 }
 ```
@@ -162,7 +159,8 @@ The MongoDB destination interface provides structured document loading operation
 
 ```go
 type IClientDBMongoDest interface {
-    GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error)
+    GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryPayload, error)
+    GenerateOptions(param *models.MongoDestQuery) (*models.MongoDestOptions, error)
 }
 ```
 
@@ -171,7 +169,8 @@ This interface enables:
 - **Document Operations** - INSERT_ONE, INSERT_MANY, UPDATE_ONE, UPDATE_MANY operations
 - **Advanced Operations** - REPLACE_ONE, DELETE_ONE, DELETE_MANY operations  
 - **Bulk Processing** - BULK_WRITE operations for efficient batch processing
-- **Flexible Write Options** - Upsert, write concern, and validation bypass capabilities
+- **Flexible Write Options** - Upsert, hints, sort, array filters, and collation per payload
+- **Per-Collection Bulk Settings** - `GenerateOptions` returns write concern, ordering, and validation-bypass settings that can differ per collection
 
 ### Write Operation Types
 
@@ -189,17 +188,21 @@ const (
     MongoWriteBulkWrite  MongoWriteOperationType = "BULK_WRITE"
 )
 
-type MongoDBWriteOptions struct {
-    Comment          any
-    Hint             any
-    Sort             any
-    Let              any
-    WriteConcern     *writeconcern.WriteConcern
-    Collation        *options.Collation
-    ArrayFilters     []any
-    Upsert           bool
+// MongoBulkCallSettings groups the bulk-write call options that apply to a
+// whole flush, as opposed to a single payload.
+type MongoBulkCallSettings struct {
     Ordered          bool
     BypassValidation bool
+    WriteConcern     *writeconcern.WriteConcern
+    Comment          any
+    Let              any
+}
+
+// MongoDestOptions is returned by GenerateOptions. Default applies to every
+// collection unless overridden by a matching entry in PerCollection.
+type MongoDestOptions struct {
+    Default       MongoBulkCallSettings
+    PerCollection map[string]MongoBulkCallSettings
 }
 ```
 
@@ -211,36 +214,39 @@ When using MongoDB as a destination, the system uses this struct definition:
 // Destination operations
 type MongoDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *mongo.Client
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MongoDestQueryTune struct {
-    Options   MongoDBWriteOptions
-    Query     any // filter document (e.g. bson.M{"_id": id})
-    Payload   any // document to write or update
-    Operation MongoWriteOperationType
+type MongoDestQueryPayload struct {
+    Collection   string
+    Query        any // filter document (e.g. bson.M{"_id": id})
+    Payload      any // document to write or update
+    Operation    MongoWriteOperationType
+    Hint         any
+    Sort         any
+    ArrayFilters []any
+    Upsert       bool
+    Collation    *options.Collation
 }
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of BSON document records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
-- **Operation Configuration** - Specifies write operation type and associated options
+- **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups; the destination MongoDB connection itself is managed internally and is not passed through this struct
+- **Operation Configuration** - Specifies write operation type, target collection, and associated per-payload options
 
 ### Example Destination Implementation
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error) {
-    tunes := make([]*models.MongoDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryPayload, error) {
+    payloads := make([]*models.MongoDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
         document := bson.M{}
-        for k, v := range rec {
+        for k, v := range rec.Data {
             document[k] = v
         }
 
@@ -250,19 +256,27 @@ func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.M
             delete(document, "_id")
         }
 
-        tunes = append(tunes, &models.MongoDestQueryTune{
-            Operation: models.MongoWriteUpdateOne,
-            Query:     filter,
-            Payload:   document,
-            Options: models.MongoDBWriteOptions{
-                Upsert:       true,
-                WriteConcern: writeconcern.W1(),
-                Ordered:      true,
-            },
+        payloads = append(payloads, &models.MongoDestQueryPayload{
+            Collection: param.State.GetName(),
+            Operation:  models.MongoWriteUpdateOne,
+            Query:      filter,
+            Payload:    bson.M{"$set": document},
+            Upsert:     true,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.MongoDestQuery) (*models.MongoDestOptions, error) {
+    return &models.MongoDestOptions{
+        // Applies to every collection this connector writes to unless a
+        // PerCollection entry overrides it.
+        Default: models.MongoBulkCallSettings{
+            Ordered:      true,
+            WriteConcern: writeconcern.W1(),
+        },
+    }, nil
 }
 ```
 

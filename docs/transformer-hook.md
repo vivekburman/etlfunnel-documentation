@@ -19,7 +19,7 @@ When building transformers, consider these approaches for optimal reusability:
 Your transformer function must implement the following signature:
 
 ```go
-func Transformer(param *models.TransformerProps) (map[string]any, error)
+func Transformer(param *models.TransformerProps) (*models.Record, error)
 ```
 
 ### Parameters
@@ -29,10 +29,17 @@ The `TransformerProps` struct provides access to:
 ```go
 type TransformerProps struct {
 	State              IPipelineRuntimeState
-	Record             map[string]any
-	SourceDBConn       IDatabaseEngine
-	DestDBConn         IDatabaseEngine
+	Record             *models.Record
 	AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+```
+
+`Record` wraps the data flowing through the pipeline:
+
+```go
+type Record struct {
+	Data map[string]any // User-facing data that goes through transformations
+	Meta map[string]any // Internal metadata preserved throughout the pipeline
 }
 ```
 
@@ -50,35 +57,37 @@ type IPipelineRuntimeState interface {
 
 ### Return Values
 
-- **Success**: Return the transformed record as `map[string]any`
+- **Success**: Return the transformed record as `*models.Record`
 - **Skip Record**: Return `nil, nil` to skip the current record and continue with the next
 - **Error**: Return `nil, error` to halt pipeline execution with an error
 
 ## Implementation Example
 
 ```go
-func Transformer(param *models.TransformerProps) (map[string]any, error) {
+func Transformer(param *models.TransformerProps) (*models.Record, error) {
+    rec := param.Record.Data
+
     // Skip records without required fields
-    email, exists := param.Record["email"]
+    email, exists := rec["email"]
     if !exists || email == "" {
         return nil, nil
     }
 
     // Transform and enrich the record
     transformed := map[string]any{
-        "customer_id": param.Record["id"],
+        "customer_id": rec["id"],
         "email":       strings.ToLower(email.(string)),
-        "full_name":   fmt.Sprintf("%s %s", param.Record["first_name"], param.Record["last_name"]),
+        "full_name":   fmt.Sprintf("%s %s", rec["first_name"], rec["last_name"]),
         "created_at":  time.Now().UTC(),
     }
 
     // Add computed fields
-    if phone, ok := param.Record["phone"].(string); ok && phone != "" {
+    if phone, ok := rec["phone"].(string); ok && phone != "" {
         transformed["has_phone"] = true
         transformed["phone_formatted"] = formatPhoneNumber(phone)
     }
 
-    return transformed, nil
+    return &models.Record{Data: transformed, Meta: param.Record.Meta}, nil
 }
 
 func formatPhoneNumber(phone string) string {

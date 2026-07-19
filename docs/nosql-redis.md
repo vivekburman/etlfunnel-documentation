@@ -15,7 +15,7 @@ type IClientDBRedisSource interface {
     GenerateKeys(param *models.RedisSourceKeys) (*models.RedisSourceKeysTune, error)
     GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsTune, error)
     GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesTune, error)
-    FetchRecords(param *models.RedisSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.RedisSourceFetch) <-chan *models.Record
 }
 ```
 
@@ -32,22 +32,16 @@ When configuring Redis as a source database, the system uses these struct defini
 // Source operations
 type RedisSourceKeys struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *redis.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type RedisSourceKeyspace struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *redis.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type RedisSourceStreams struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *redis.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -55,7 +49,6 @@ type RedisSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *redis.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 // RedisRawValue carries a raw value read from a Redis key.
@@ -113,8 +106,7 @@ const (
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct Redis client connection for data extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct Redis client connection for data extraction, available on `RedisSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations
 - **Keys ParseFn** - Controls how raw Redis key values are shaped into pipeline records
 - **Keyspace ParseFn** - Controls how raw keyspace notification events are shaped into pipeline records
@@ -168,8 +160,8 @@ func (c *IUseConnector) GenerateKeyspace(param *models.RedisSourceKeyspace) (*mo
     }, nil
 }
 
-func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -184,9 +176,11 @@ func (c *IUseConnector) FetchRecords(param *models.RedisSourceFetch) <-chan map[
                 continue
             }
 
-            ch <- map[string]any{
-                "key":   key,
-                "value": val,
+            ch <- &models.Record{
+                Data: map[string]any{
+                    "key":   key,
+                    "value": val,
+                },
             }
         }
 
@@ -209,7 +203,8 @@ The Redis destination interface provides structured data loading operations:
 
 ```go
 type IClientDBRedisDest interface {
-    GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryTune, error)
+    GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryPayload, error)
+    GenerateOptions(param *models.RedisDestQuery) (*models.RedisDestOptions, error)
 }
 ```
 
@@ -217,7 +212,8 @@ This interface enables:
 
 - **Multiple Data Types** - Support for strings, hashes, lists, sets, sorted sets, and streams
 - **Expiration Management** - TTL settings for automatic data cleanup
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Connector Options** - `GenerateOptions` returns a `RedisDestOptions` value; Redis currently defines no connector-wide settings, so this struct is empty
 
 ### Destination Configuration Structure
 
@@ -227,13 +223,11 @@ When using Redis as a destination, the system uses this struct definition:
 // Destination operations
 type RedisDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *redis.Client
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type RedisDestQueryTune struct {
+type RedisDestQueryPayload struct {
     Value      any
     Operation  RedisDestOperation
     Key        string
@@ -241,6 +235,10 @@ type RedisDestQueryTune struct {
     MaxLen     int64
     Approx     bool
 }
+
+// RedisDestOptions currently has no fields; Redis has no connector-wide
+// write settings, so GenerateOptions returns an empty struct.
+type RedisDestOptions struct{}
 
 type RedisDestOperation string
 
@@ -261,28 +259,28 @@ const (
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups; the destination Redis connection itself is managed internally and is not passed through this struct
 - **Operation Configuration** - Specifies typed Redis commands and parameters
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryTune, error) {
-    tunes := make([]*models.RedisDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) ([]*models.RedisDestQueryPayload, error) {
+    payloads := make([]*models.RedisDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        key := fmt.Sprintf("%s:%v", param.State.GetName(), rec["id"])
+        key := fmt.Sprintf("%s:%v", param.State.GetName(), rec.Data["id"])
         expiration := time.Duration(0)
 
-        if ttl, exists := rec["ttl"]; exists {
+        if ttl, exists := rec.Data["ttl"]; exists {
             if ttlInt, ok := ttl.(int); ok {
                 expiration = time.Duration(ttlInt) * time.Second
             }
         }
 
         op := models.RedisDestOpSet
-        if recordType, exists := rec["type"]; exists {
+        if recordType, exists := rec.Data["type"]; exists {
             switch recordType {
             case "hash":
                 op = models.RedisDestOpHSet
@@ -295,15 +293,20 @@ func (c *IUseConnector) GenerateQuery(param *models.RedisDestQuery) ([]*models.R
             }
         }
 
-        tunes = append(tunes, &models.RedisDestQueryTune{
+        payloads = append(payloads, &models.RedisDestQueryPayload{
             Operation:  op,
             Key:        key,
-            Value:      rec["data"],
+            Value:      rec.Data["data"],
             Expiration: expiration,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.RedisDestQuery) (*models.RedisDestOptions, error) {
+    // Redis defines no connector-wide write settings today, so this is a no-op.
+    return &models.RedisDestOptions{}, nil
 }
 ```
 

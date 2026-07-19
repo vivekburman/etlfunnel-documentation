@@ -13,7 +13,7 @@ type IClientRESTAPISource interface {
     GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateTune, error)
     GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookTune, error)
     GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorTune, error)
-    FetchRecords(param *models.RESTAPISourceFetch) <-chan map[string]any
+    FetchRecords(param *models.RESTAPISourceFetch) <-chan *models.Record
 }
 ```
 
@@ -29,7 +29,6 @@ type RESTAPISourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *http.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 // RESTAPIRawResponse carries the raw HTTP response passed to ParseFn.
@@ -72,7 +71,6 @@ These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source Connection** - `*http.Client` configured with auth transport and base URL
-- **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **ParseFn** - Controls how raw HTTP response bytes become pipeline records; the engine never decides the record shape
 - **NextPageToken** - Controls pagination advance; return `("", false)` to signal the source is exhausted
@@ -157,8 +155,8 @@ func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch)
     }, nil
 }
 
-func (c *IUseConnector) FetchRecords(param *models.RESTAPISourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.RESTAPISourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
     close(ch) // not used when Generate* methods are active
     return ch
 }
@@ -172,14 +170,16 @@ The REST API destination interface provides HTTP write operations:
 
 ```go
 type IClientRESTAPIDest interface {
-    GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryTune, error)
+    GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryPayload, error)
+    GenerateOptions(param *models.RESTAPIDestQuery) (*models.RESTAPIDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Per-record HTTP requests** - Method, path, headers, and body per record
-- **Batch processing** - Receives a batch of records and returns one tune per HTTP request
+- **Batch processing** - Receives a batch of records and returns one payload per HTTP request
+- **One-time write tuning** - `GenerateOptions` runs once, before the pipeline starts consuming records
 
 ### Destination Configuration Structure
 
@@ -187,38 +187,42 @@ This interface enables:
 // Destination operations
 type RESTAPIDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *http.Client
+    Records            []*Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type RESTAPIDestQueryTune struct {
+type RESTAPIDestQueryPayload struct {
     Headers map[string]string
     Body    map[string]any
     Method  string // POST, PUT, PATCH, DELETE
     Path    string // e.g. "/v1/events"
 }
+
+type RESTAPIDestOptions struct{}
 ```
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryTune, error) {
-    tunes := make([]*models.RESTAPIDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryPayload, error) {
+    payloads := make([]*models.RESTAPIDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        tunes = append(tunes, &models.RESTAPIDestQueryTune{
+        payloads = append(payloads, &models.RESTAPIDestQueryPayload{
             Method: "POST",
             Path:   "/api/v1/ingest",
             Headers: map[string]string{
                 "Content-Type": "application/json",
             },
-            Body: rec,
+            Body: rec.Data,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.RESTAPIDestQuery) (*models.RESTAPIDestOptions, error) {
+    return nil, nil // no one-time write tuning needed
 }
 ```
 

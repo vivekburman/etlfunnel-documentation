@@ -129,7 +129,7 @@ Once created, your User Libraries can be imported and used in any pipeline:
 
 ```go
 // Import your user library
-import "your-workspace/client_userlibrary"
+import "etlfunnel/execution/client/userlibraries"
 
 // Use utility functions
 validator := &client_userlibrary.DataValidator{}

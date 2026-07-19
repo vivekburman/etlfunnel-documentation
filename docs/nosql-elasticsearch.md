@@ -12,7 +12,7 @@ The Elasticsearch source interface supports two primary extraction approaches th
 
 ```go
 type IClientDBElasticSource interface {
-    FetchRecords(param *models.ElasticSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.ElasticSourceFetch) <-chan *models.Record
     GenerateQuery(request *models.ElasticSourceQuery) (*models.ElasticQueryTune, error)
 }
 ```
@@ -30,13 +30,10 @@ type ElasticSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *elasticsearch.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type ElasticSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *elasticsearch.Client
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -60,16 +57,15 @@ const (
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct Elasticsearch client connection for data extraction  
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct Elasticsearch client connection for data extraction, available on `ElasticSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Query Types** - Support for various Elasticsearch operations including search, scroll, get, multi-get, and SQL
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -101,7 +97,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan ma
         for _, hit := range hits {
             hitMap := hit.(map[string]interface{})
             source := hitMap["_source"].(map[string]interface{})
-            ch <- source
+            ch <- &models.Record{Data: source}
         }
 
         scrollID := searchResponse["_scroll_id"].(string)
@@ -126,7 +122,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan ma
             for _, hit := range scrollHits {
                 hitMap := hit.(map[string]interface{})
                 source := hitMap["_source"].(map[string]interface{})
-                ch <- source
+                ch <- &models.Record{Data: source}
             }
 
             scrollID = scrollResponse["_scroll_id"].(string)
@@ -163,15 +159,17 @@ The Elasticsearch destination interface provides structured data loading operati
 
 ```go
 type IClientDBElasticDest interface {
-    GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error)
+    GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryPayload, error)
+    GenerateOptions(param *models.ElasticDestQuery) (*models.ElasticDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Document Indexing** - Optimized CREATE, INDEX, and UPDATE operations
-- **Bulk Processing** - Receives a batch of records and returns one query tune per record
+- **Bulk Processing** - Receives a batch of records and returns one query payload per record
 - **Upsert Operations** - Combined insert and update functionality
+- **Refresh Policy Configuration** - `GenerateOptions` returns an `ElasticDestOptions` value that sets the refresh policy for the whole bulk request
 
 ### Destination Configuration Structure
 
@@ -181,21 +179,18 @@ When using Elasticsearch as a destination, the system uses these struct definiti
 // Destination operations
 type ElasticDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *elasticsearch.Client
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type ElasticDestQueryTune struct {
-    Document      map[string]any
-    Upsert        map[string]any
-    ScriptParams  map[string]any
-    Index         string
-    DocID         string
-    Operation     DBElasticWriteOperationType
-    RefreshPolicy string
-    Script        string
+type ElasticDestQueryPayload struct {
+    Document     map[string]any
+    Upsert       map[string]any
+    ScriptParams map[string]any
+    Index        string
+    DocID        string
+    Operation    DBElasticWriteOperationType
+    Script       string
 }
 
 const (
@@ -204,32 +199,38 @@ const (
     ElasticWriteUpdate DBElasticWriteOperationType = "UPDATE"
     ElasticWriteDelete DBElasticWriteOperationType = "DELETE"
 )
+
+// ElasticDestOptions is returned by GenerateOptions and applies to the whole
+// Bulk() request rather than a single payload.
+type ElasticDestOptions struct {
+    RefreshPolicy string
+}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups; the destination Elasticsearch connection itself is managed internally and is not passed through this struct
 - **Operation Types** - Supports various Elasticsearch write operations
-- **Refresh Policies** - Controls when documents become searchable
+- **Refresh Policies** - Controlled via `ElasticDestOptions.RefreshPolicy` from `GenerateOptions`, applied to the whole bulk request
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error) {
-    tunes := make([]*models.ElasticDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryPayload, error) {
+    payloads := make([]*models.ElasticDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
         docID := ""
-        if id, exists := rec["id"]; exists {
+        if id, exists := rec.Data["id"]; exists {
             docID = fmt.Sprintf("%v", id)
         } else {
             docID = fmt.Sprintf("%d", time.Now().UnixNano())
         }
 
         document := make(map[string]any)
-        for k, v := range rec {
+        for k, v := range rec.Data {
             document[k] = v
         }
 
@@ -237,16 +238,21 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models
             document["@timestamp"] = time.Now().UTC().Format(time.RFC3339)
         }
 
-        tunes = append(tunes, &models.ElasticDestQueryTune{
-            Index:         param.State.GetName(),
-            DocID:         docID,
-            Operation:     models.ElasticWriteIndex,
-            Document:      document,
-            RefreshPolicy: "false",
+        payloads = append(payloads, &models.ElasticDestQueryPayload{
+            Index:     param.State.GetName(),
+            DocID:     docID,
+            Operation: models.ElasticWriteIndex,
+            Document:  document,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.ElasticDestQuery) (*models.ElasticDestOptions, error) {
+    return &models.ElasticDestOptions{
+        RefreshPolicy: "false",
+    }, nil
 }
 ```
 

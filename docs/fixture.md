@@ -62,12 +62,13 @@ type IDatabaseEngine interface {
 ```go
 import (
 	"context"
+	castpostgres "etlfunnel/execution/cast/postgres"
 	"etlfunnel/execution/models"
 	"fmt"
 )
 
 func Setup(param *models.FixtureProps) error {
-	conn, err := cast.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture setup: connect auxdb: %w", err)
 	}
@@ -103,12 +104,13 @@ func Setup(param *models.FixtureProps) error {
 ```go
 import (
 	"context"
+	castpostgres "etlfunnel/execution/cast/postgres"
 	"etlfunnel/execution/models"
 	"fmt"
 )
 
 func Teardown(param *models.FixtureProps) error {
-	conn, err := cast.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture teardown: connect auxdb: %w", err)
 	}

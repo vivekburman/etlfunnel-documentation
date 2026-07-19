@@ -22,10 +22,8 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error)
 ```go
 type BacklogProps struct {
 	State              models.IPipelineRuntimeState
-	SourceDBConn       models.IDatabaseEngine
-	DestDBConn         models.IDatabaseEngine
 	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
-	Records            []map[string]any
+	Records            []*models.Record
 	FailureStage       models.FailureStage
 	Err                error
 }
@@ -57,6 +55,11 @@ const (
 	FailureStageDestination
 )
 
+type Record struct {
+	Data map[string]any // User-facing data that goes through transformations
+	Meta map[string]any // Internal metadata preserved throughout pipeline
+}
+
 type IPipelineRuntimeState interface {
 	GetName() string
 	GetFlowName() string
@@ -76,14 +79,14 @@ type IPipelineRuntimeState interface {
 ```go
 import (
 	"encoding/json"
+	castmysql "etlfunnel/execution/cast/mysql"
 	"etlfunnel/execution/models"
-	"etlfunnel/database/cast"
 	"fmt"
 	"time"
 )
 
 func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
-	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
+	mysqlConn, err := castmysql.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +98,8 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
 	`
 
 	for _, record := range param.Records {
-		recordJSON, _ := json.Marshal(record)
-		recordID := fmt.Sprintf("%v", record["id"])
+		recordJSON, _ := json.Marshal(record.Data)
+		recordID := fmt.Sprintf("%v", record.Data["id"])
 
 		_, err := mysqlConn.Exec(query,
 			param.State.GetName(),

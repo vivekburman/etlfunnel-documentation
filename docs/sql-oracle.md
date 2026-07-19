@@ -12,7 +12,7 @@ The Oracle source interface supports three primary extraction approaches through
 
 ```go
 type IClientDBOracleSource interface {
-    FetchRecords(param *models.OracleSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.OracleSourceFetch) <-chan *models.Record
     GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error)
     GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error)
 }
@@ -32,20 +32,15 @@ type OracleSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *sql.DB
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type OracleSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *sql.DB
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type OracleSourceCDC struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *sql.DB
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -56,7 +51,7 @@ type OracleSourceQueryTune struct {
 }
 
 type OracleSourceCDCTune struct {
-    ParseFn                func(ChangeEvent) (map[string]any, error)
+    ParseFn                func(OracleChangeEvent) (map[string]any, error)
     StartTime              time.Time
     SourceTables           []string
     IncludeOperations      []string
@@ -78,25 +73,28 @@ type OracleSourceCDCTune struct {
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct Oracle connection instance for data extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct Oracle connection instance for data extraction, available on `OracleSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Advanced CDC Configuration** - Comprehensive change data capture settings with SCN management, retry logic, and session handling
 - **CDC ParseFn** - Controls how raw Oracle change events are shaped into pipeline records
 
-### ChangeEvent
+### OracleChangeEvent
 
-`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+`OracleChangeEvent` is the typed value the engine passes to the `ParseFn` of `OracleSourceCDCTune`. All fields are populated by the engine before your function is called.
 
 ```go
-type ChangeEvent struct {
+type OracleChangeEvent struct {
     Before    map[string]any
     After     map[string]any
     Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
-    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+    Position  string // SCN represented as string
+    SCN       uint64
+    Timestamp time.Time
+    RedoSQL   string
+    UndoSQL   string
 }
 
 type ChangeEventOperation string
@@ -116,14 +114,18 @@ const (
 | `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
 | `Database` | Source database name. |
 | `Table` | Source table name. |
-| `Position` | Oracle SCN at the time of the change. |
-| `Meta` | Oracle-specific extras (e.g. redo/undo SQL). |
+| `Position` | Oracle SCN at the time of the change, represented as a string. |
+| `SCN` | Oracle SCN at the time of the change, as a numeric value. |
+| `Timestamp` | Time the change was captured. |
+| `RedoSQL` | Redo SQL for the change, when available. |
+| `UndoSQL` | Undo SQL for the change, when available. |
+| `Meta` | Oracle-specific extras. |
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -152,7 +154,7 @@ func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan map
             for i, col := range cols {
                 record[col] = vals[i]
             }
-            ch <- record
+            ch <- &models.Record{Data: record}
         }
     }()
 
@@ -182,7 +184,7 @@ func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.Orac
         BaseRetryDelayMs:       500,
         MaxRetryDelayMs:        10000,
         RetryJitter:            0.3,
-        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+        ParseFn: func(event models.OracleChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
                 record = event.Before
@@ -205,14 +207,16 @@ The Oracle destination interface provides structured data loading operations:
 
 ```go
 type IClientDBOracleDest interface {
-    GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error)
+    GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryPayload, error)
+    GenerateOptions(param *models.OracleDestQuery) (*models.OracleDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and MERGE operations
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Options Generation** - Hook for destination-wide options (currently `OracleDestOptions` carries no fields)
 
 ### Destination Configuration Structure
 
@@ -222,38 +226,38 @@ When using Oracle as a destination, the system uses this struct definition:
 // Destination operations
 type OracleDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *sql.DB
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type OracleDestQueryTune struct {
+type OracleDestQueryPayload struct {
     Query string
     Value []any
 }
+
+type OracleDestOptions struct{}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each wrapping a `Data` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error) {
-    tunes := make([]*models.OracleDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryPayload, error) {
+    payloads := make([]*models.OracleDestQueryPayload, 0, len(param.Records))
 
     for i, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
         j := 1
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, ":v"+strconv.Itoa(j))
             args = append(args, v)
@@ -266,14 +270,14 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.
             strings.Join(placeholders, ", "),
         )
 
-        tunes = append(tunes, &models.OracleDestQueryTune{
+        payloads = append(payloads, &models.OracleDestQueryPayload{
             Query: query,
             Value: args,
         })
         _ = i
     }
 
-    return tunes, nil
+    return payloads, nil
 }
 ```
 

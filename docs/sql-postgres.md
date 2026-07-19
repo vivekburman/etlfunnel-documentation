@@ -12,7 +12,7 @@ The PostgreSQL source interface supports four primary extraction approaches thro
 
 ```go
 type IClientDBPostgresSource interface {
-    FetchRecords(param *models.PostgresSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.PostgresSourceFetch) <-chan *models.Record
     GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryTune, error)
     GenerateNotification(param *models.PostgresSourceNotification) (*models.PostgresSourceNotificationTune, error)
     GenerateWAL(param *models.PostgresSourceWAL) (*models.PostgresSourceWALTune, error)
@@ -34,27 +34,20 @@ type PostgresSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *pgx.Conn
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type PostgresSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *pgx.Conn
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type PostgresSourceNotification struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *pgx.Conn
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
 type PostgresSourceWAL struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *pgx.Conn
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -68,7 +61,7 @@ type PostgresSourceNotificationTune struct {
 }
 
 type PostgresSourceWALTune struct {
-    ParseFn         func(ChangeEvent) (map[string]any, error)
+    ParseFn         func(PostgresChangeEvent) (map[string]any, error)
     SlotName        string
     OutputPlugin    PostgresCDCOutputPluginType
     PublicationName string
@@ -91,25 +84,25 @@ type PostgresRawNotification struct {
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct PostgreSQL connection instance using pgx driver
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct PostgreSQL connection instance using pgx driver, available on `PostgresSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **WAL Configuration** - Advanced replication settings with support for multiple output plugins and a `ParseFn` for shaping change events into records
 - **Notification Channels** - Real-time event processing with a `ParseFn` to transform raw payloads into records
 
-### ChangeEvent
+### PostgresChangeEvent
 
-`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+`PostgresChangeEvent` is the typed value the engine passes to the `ParseFn` of `PostgresSourceWALTune`. All fields are populated by the engine before your function is called.
 
 ```go
-type ChangeEvent struct {
-    Before    map[string]any
-    After     map[string]any
-    Meta      map[string]any
-    Operation ChangeEventOperation
-    Database  string
-    Table     string
-    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+type PostgresChangeEvent struct {
+    Before      map[string]any
+    After       map[string]any
+    Meta        map[string]any
+    Operation   ChangeEventOperation
+    Database    string
+    Table       string
+    Position    string // LSN represented as string
+    RelationOID uint32 // relation OID from the replication protocol
 }
 
 type ChangeEventOperation string
@@ -129,14 +122,15 @@ const (
 | `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
 | `Database` | Source database name. |
 | `Table` | Source table name. |
-| `Position` | Replication position — LSN, GTID, or SCN depending on the database. |
-| `Meta` | Source-specific extras (e.g. Postgres relation OID, Oracle redo SQL). |
+| `Position` | Postgres LSN at the time of the change. |
+| `RelationOID` | Relation OID from the logical replication protocol. |
+| `Meta` | Source-specific extras. |
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.PostgresSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.PostgresSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -160,7 +154,7 @@ func (c *IUseConnector) FetchRecords(param *models.PostgresSourceFetch) <-chan m
             for i, col := range rows.FieldDescriptions() {
                 record[string(col.Name)] = values[i]
             }
-            ch <- record
+            ch <- &models.Record{Data: record}
         }
     }()
 
@@ -194,7 +188,7 @@ func (c *IUseConnector) GenerateWAL(param *models.PostgresSourceWAL) (*models.Po
         OutputPlugin:    models.PostgresCDCTypePGOutput,
         Streaming:       true,
         PublicationName: publicationName,
-        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+        ParseFn: func(event models.PostgresChangeEvent) (map[string]any, error) {
             return map[string]any{
                 "operation": string(event.Operation),
                 "table":     event.Table,
@@ -216,14 +210,16 @@ The PostgreSQL destination interface provides structured data loading operations
 
 ```go
 type IClientDBPostgresDest interface {
-    GenerateQuery(param *models.PostgresDestQuery) ([]*models.PostgresDestQueryTune, error)
+    GenerateQuery(param *models.PostgresDestQuery) ([]*models.PostgresDestQueryPayload, error)
+    GenerateOptions(param *models.PostgresDestQuery) (*models.PostgresDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and UPSERT operations with PostgreSQL-specific features
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Options Generation** - Hook for destination-wide options (currently `PostgresDestOptions` carries no fields)
 
 ### Destination Configuration Structure
 
@@ -233,39 +229,39 @@ When using PostgreSQL as a destination, the system uses these struct definitions
 // Destination operations
 type PostgresDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *pgx.Conn
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type PostgresDestQueryTune struct {
+type PostgresDestQueryPayload struct {
     Query string
     Value []any
 }
+
+type PostgresDestOptions struct{}
 ```
 
 These structures manage:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections using pgx driver
+- **Records Processing** - Handles a batch of `*models.Record` values (each wrapping a `Data` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.PostgresDestQuery) ([]*models.PostgresDestQueryTune, error) {
-    tunes := make([]*models.PostgresDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.PostgresDestQuery) ([]*models.PostgresDestQueryPayload, error) {
+    payloads := make([]*models.PostgresDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        updates := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        updates := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
         i := 1
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, fmt.Sprintf("$%d", i))
             updates = append(updates, fmt.Sprintf("%s = EXCLUDED.%s", k, k))
@@ -281,13 +277,13 @@ func (c *IUseConnector) GenerateQuery(param *models.PostgresDestQuery) ([]*model
             strings.Join(updates, ", "),
         )
 
-        tunes = append(tunes, &models.PostgresDestQueryTune{
+        payloads = append(payloads, &models.PostgresDestQueryPayload{
             Query: query,
             Value: args,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
 }
 ```
 

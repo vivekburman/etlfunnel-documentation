@@ -12,7 +12,7 @@ The Kafka source interface supports three extraction approaches:
 type IClientDBKafkaSource interface {
     GenerateSubscription(param *models.KafkaSourceSubscribe) (*models.KafkaSourceSubscriptionTune, error)
     GenerateAssignment(param *models.KafkaSourceAssign) (*models.KafkaSourceAssignmentTune, error)
-    FetchRecords(param *models.KafkaSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.KafkaSourceFetch) <-chan *models.Record
 }
 ```
 
@@ -25,23 +25,18 @@ type IClientDBKafkaSource interface {
 ```go
 type KafkaSourceSubscribe struct {
     State              IPipelineRuntimeState
-    SourceDBConn       sarama.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type KafkaSourceAssign struct {
     State              IPipelineRuntimeState
-    SourceDBConn       sarama.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type KafkaSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       sarama.Client
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type KafkaSourceSubscriptionTune struct {
@@ -86,8 +81,7 @@ type KafkaRawMessage struct {
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source Connection** - Sarama client instance for Kafka consumption
-- **Destination DB Connection** - Target database interface for processed data
+- **Source Connection** - Sarama client instance for Kafka consumption, available on `KafkaSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **ParseFn** - Controls how raw Kafka message bytes become pipeline records; the engine never decides the record shape
 
@@ -137,8 +131,8 @@ func (c *IUseConnector) GenerateAssignment(param *models.KafkaSourceAssign) (*mo
     }, nil
 }
 
-func (c *IUseConnector) FetchRecords(param *models.KafkaSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.KafkaSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
     close(ch) // not used when GenerateSubscription or GenerateAssignment is active
     return ch
 }
@@ -152,14 +146,16 @@ The Kafka destination interface provides message publishing operations:
 
 ```go
 type IClientDBKafkaDest interface {
-    GenerateQuery(param *models.KafkaDestQuery) ([]*models.KafkaDestQueryTune, error)
+    GenerateQuery(param *models.KafkaDestQuery) ([]*models.KafkaDestQueryPayload, error)
+    GenerateOptions(param *models.KafkaDestQuery) (*models.KafkaDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Per-record message tuning** - Topic, key, value, partition, and headers per message
-- **Batch processing** - Receives a batch of records and returns one tune per message
+- **Batch processing** - Receives a batch of records and returns one payload per message
+- **Connector Options** - `GenerateOptions` returns a `KafkaDestOptions` value; Kafka currently defines no connector-wide settings, so this struct is empty
 
 ### Destination Configuration Structure
 
@@ -167,19 +163,21 @@ This interface enables:
 // Destination operations
 type KafkaDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         sarama.Client
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type KafkaDestQueryTune struct {
+type KafkaDestQueryPayload struct {
     Headers   []KafkaHeader
     Topic     string
     Key       []byte
     Value     []byte
     Partition int32 // -1 for partitioner-assigned
 }
+
+// KafkaDestOptions currently has no fields; Kafka has no connector-wide
+// write settings, so GenerateOptions returns an empty struct.
+type KafkaDestOptions struct{}
 
 type KafkaHeader struct {
     Key   string
@@ -190,20 +188,20 @@ type KafkaHeader struct {
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.KafkaDestQuery) ([]*models.KafkaDestQueryTune, error) {
-    tunes := make([]*models.KafkaDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.KafkaDestQuery) ([]*models.KafkaDestQueryPayload, error) {
+    payloads := make([]*models.KafkaDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        topic, _ := rec["_kafka_topic"].(string)
+        topic, _ := rec.Data["_kafka_topic"].(string)
         if topic == "" {
             topic = param.State.GetName()
         }
 
-        key, _ := rec["id"].(string)
+        key, _ := rec.Data["id"].(string)
 
         // Strip internal routing fields before serialising the value.
-        payload := make(map[string]any, len(rec))
-        for k, v := range rec {
+        payload := make(map[string]any, len(rec.Data))
+        for k, v := range rec.Data {
             if len(k) > 0 && k[0] == '_' {
                 continue
             }
@@ -215,7 +213,7 @@ func (c *IUseConnector) GenerateQuery(param *models.KafkaDestQuery) ([]*models.K
             return nil, fmt.Errorf("marshal record: %w", err)
         }
 
-        tunes = append(tunes, &models.KafkaDestQueryTune{
+        payloads = append(payloads, &models.KafkaDestQueryPayload{
             Topic:     topic,
             Key:       []byte(key),
             Value:     valueBytes,
@@ -223,7 +221,12 @@ func (c *IUseConnector) GenerateQuery(param *models.KafkaDestQuery) ([]*models.K
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.KafkaDestQuery) (*models.KafkaDestOptions, error) {
+    // Kafka defines no connector-wide write settings today, so this is a no-op.
+    return &models.KafkaDestOptions{}, nil
 }
 ```
 

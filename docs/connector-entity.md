@@ -62,4 +62,21 @@ func (d *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*model
 	return &models.PostgresSourceQueryTune{Query: query}, nil
 }
 
+// FetchRecords, GenerateNotification, and GenerateWAL are unused — this
+// connector only implements query-based capture, but every method of
+// IClientDBPostgresSource must still be defined to satisfy the interface.
+func (d *IUseConnector) FetchRecords(_ *models.PostgresSourceFetch) <-chan *models.Record {
+	ch := make(chan *models.Record)
+	close(ch)
+	return ch
+}
+
+func (d *IUseConnector) GenerateNotification(_ *models.PostgresSourceNotification) (*models.PostgresSourceNotificationTune, error) {
+	return nil, fmt.Errorf("notification-based capture not implemented")
+}
+
+func (d *IUseConnector) GenerateWAL(_ *models.PostgresSourceWAL) (*models.PostgresSourceWALTune, error) {
+	return nil, fmt.Errorf("WAL-based capture not implemented")
+}
+
 ```

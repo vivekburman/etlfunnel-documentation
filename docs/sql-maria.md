@@ -12,7 +12,7 @@ The MariaDB source interface supports three primary extraction approaches throug
 
 ```go
 type IClientDBMariaSource interface {
-    FetchRecords(param *models.MariaSourceFetch) <-chan map[string]any
+    FetchRecords(param *models.MariaSourceFetch) <-chan *models.Record
     GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error)
     GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error)
 }
@@ -32,20 +32,15 @@ type MariaSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *client.Conn
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type MariaSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *client.Conn
     AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
 }
 
 type MariaSourceBinlog struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *client.Conn
-    DestDBConn         IDatabaseEngine
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
@@ -54,7 +49,7 @@ type MariaSourceQueryTune struct {
 }
 
 type MariaSourceBinlogTune struct {
-    ParseFn  func(ChangeEvent) (map[string]any, error)
+    ParseFn  func(MariaChangeEvent) (map[string]any, error)
     ServerID uint32
 }
 ```
@@ -62,24 +57,27 @@ type MariaSourceBinlogTune struct {
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct MariaDB connection instance for data extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct MariaDB connection instance for data extraction, available on `MariaSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
 
-### ChangeEvent
+### MariaChangeEvent
 
-`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+`MariaChangeEvent` is the typed value the engine passes to the `ParseFn` of `MariaSourceBinlogTune`. All fields are populated by the engine before your function is called.
 
 ```go
-type ChangeEvent struct {
+type MariaChangeEvent struct {
     Before    map[string]any
     After     map[string]any
     Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
-    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+    Position  string // LSN / GTID / SCN represented as string
+    Query     string // DDL/QueryEvent text
+    XID       string // transaction id (XIDEvent)
+    GTID      string // global transaction id (MariadbGTIDEvent)
+    Timestamp uint32 // binlog event header timestamp (row events)
 }
 
 type ChangeEventOperation string
@@ -99,13 +97,17 @@ const (
 | `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
 | `Database` | Source database name. |
 | `Table` | Source table name. |
-| `Position` | Replication position — LSN, GTID, or SCN depending on the database. |
-| `Meta` | Source-specific extras (e.g. Postgres relation OID, Oracle redo SQL). |
+| `Position` | Replication position (GTID/log position) at the time of the change. |
+| `Query` | Raw DDL/query text, populated for `QueryEvent`-based changes. |
+| `XID` | Transaction id, populated for `XIDEvent`-based changes. |
+| `GTID` | MariaDB global transaction id, populated for `MariadbGTIDEvent`-based changes. |
+| `Timestamp` | Binlog event header timestamp for row events. |
+| `Meta` | Source-specific extras. |
 
 ### Example Source
 ```go
-func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -122,7 +124,7 @@ func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan map[
                 val, _ := rows.GetValue(i, j)
                 record[string(col.Name)] = val
             }
-            ch <- record
+            ch <- &models.Record{Data: record}
         }
     }()
 
@@ -137,7 +139,7 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.M
 func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error) {
     return &models.MariaSourceBinlogTune{
         ServerID: 1234, // unique replication client ID
-        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+        ParseFn: func(event models.MariaChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
                 record = event.Before
@@ -160,14 +162,16 @@ The MariaDB destination interface provides structured data loading operations:
 
 ```go
 type IClientDBMariaDest interface {
-    GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error)
+    GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryPayload, error)
+    GenerateOptions(param *models.MariaDestQuery) (*models.MariaDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and UPSERT operations
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Options Generation** - Hook for destination-wide options (currently `MariaDestOptions` carries no fields)
 
 ### Destination Configuration Structure
 
@@ -177,36 +181,36 @@ When using MariaDB as a destination, the system uses this struct definition:
 // Destination operations
 type MariaDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *client.Conn
+    Records            []*models.Record
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MariaDestQueryTune struct {
+type MariaDestQueryPayload struct {
     Query string
     Value []any
 }
+
+type MariaDestOptions struct{}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each wrapping a `Data` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error) {
-    tunes := make([]*models.MariaDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryPayload, error) {
+    payloads := make([]*models.MariaDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, "?")
             args = append(args, v)
@@ -218,13 +222,13 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.M
             strings.Join(placeholders, ", "),
         )
 
-        tunes = append(tunes, &models.MariaDestQueryTune{
+        payloads = append(payloads, &models.MariaDestQueryPayload{
             Query: query,
             Value: args,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
 }
 ```
 
