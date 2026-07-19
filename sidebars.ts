@@ -46,6 +46,12 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: true,
             type: 'category',
+            label: 'Observability',
+            items: ['ef-codes'],
+        },
+        {
+            collapsed: true,
+            type: 'category',
             label: 'Code Reference',
             items: [
                 {
