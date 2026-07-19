@@ -10,8 +10,8 @@ The Kafka source interface supports three extraction approaches:
 
 ```go
 type IClientDBKafkaSource interface {
-    GenerateSubscription(param *models.KafkaSourceSubscribe) (*models.KafkaSourceSubscriptionTune, error)
-    GenerateAssignment(param *models.KafkaSourceAssign) (*models.KafkaSourceAssignmentTune, error)
+    GenerateSubscription(param *models.KafkaSourceSubscribe) (*models.KafkaSourceSubscriptionOptions, error)
+    GenerateAssignment(param *models.KafkaSourceAssign) (*models.KafkaSourceAssignmentOptions, error)
     FetchRecords(param *models.KafkaSourceFetch) <-chan *models.Record
 }
 ```
@@ -39,7 +39,7 @@ type KafkaSourceFetch struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type KafkaSourceSubscriptionTune struct {
+type KafkaSourceSubscriptionOptions struct {
     Topics            []string
     GroupID           string
     InitialOffset     int64 // sarama.OffsetNewest or sarama.OffsetOldest
@@ -52,7 +52,7 @@ type KafkaSourceSubscriptionTune struct {
     ParseFn           func(KafkaRawMessage) (map[string]any, error)
 }
 
-type KafkaSourceAssignmentTune struct {
+type KafkaSourceAssignmentOptions struct {
     Partitions    []KafkaTopicPartition
     MaxWaitTime   time.Duration
     FetchMaxBytes int32
@@ -88,8 +88,8 @@ These structures provide:
 ### Example Source
 
 ```go
-func (c *IUseConnector) GenerateSubscription(param *models.KafkaSourceSubscribe) (*models.KafkaSourceSubscriptionTune, error) {
-    return &models.KafkaSourceSubscriptionTune{
+func (c *IUseConnector) GenerateSubscription(param *models.KafkaSourceSubscribe) (*models.KafkaSourceSubscriptionOptions, error) {
+    return &models.KafkaSourceSubscriptionOptions{
         Topics:            []string{param.State.GetName()},
         GroupID:           "etl-consumer-group",
         InitialOffset:     sarama.OffsetOldest,
@@ -113,8 +113,8 @@ func (c *IUseConnector) GenerateSubscription(param *models.KafkaSourceSubscribe)
     }, nil
 }
 
-func (c *IUseConnector) GenerateAssignment(param *models.KafkaSourceAssign) (*models.KafkaSourceAssignmentTune, error) {
-    return &models.KafkaSourceAssignmentTune{
+func (c *IUseConnector) GenerateAssignment(param *models.KafkaSourceAssign) (*models.KafkaSourceAssignmentOptions, error) {
+    return &models.KafkaSourceAssignmentOptions{
         Partitions: []models.KafkaTopicPartition{
             {Topic: param.State.GetName(), Partition: 0, Offset: sarama.OffsetOldest},
             {Topic: param.State.GetName(), Partition: 1, Offset: sarama.OffsetOldest},

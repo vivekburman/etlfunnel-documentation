@@ -10,9 +10,9 @@ The REST API source interface supports four extraction approaches:
 
 ```go
 type IClientRESTAPISource interface {
-    GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateTune, error)
-    GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookTune, error)
-    GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorTune, error)
+    GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateOptions, error)
+    GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookOptions, error)
+    GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorOptions, error)
     FetchRecords(param *models.RESTAPISourceFetch) <-chan *models.Record
 }
 ```
@@ -38,7 +38,7 @@ type RESTAPIRawResponse struct {
     StatusCode int
 }
 
-type RESTAPISourcePaginateTune struct {
+type RESTAPISourcePaginateOptions struct {
     Headers       map[string]string
     QueryParams   map[string]string
     Body          map[string]any // for POST-based pagination
@@ -50,7 +50,7 @@ type RESTAPISourcePaginateTune struct {
     NextPageToken func(body []byte, headers http.Header) (string, bool)
 }
 
-type RESTAPISourceCursorTune struct {
+type RESTAPISourceCursorOptions struct {
     Path          string
     CursorParam   string // e.g. "since", "after", "start_date"
     CursorValue   string // initial cursor value
@@ -58,7 +58,7 @@ type RESTAPISourceCursorTune struct {
     NextPageToken func(body []byte, headers http.Header) (string, bool)
 }
 
-type RESTAPISourceWebhookTune struct {
+type RESTAPISourceWebhookOptions struct {
     ListenAddr       string // e.g. ":8081"
     Path             string // e.g. "/webhook"
     Secret           string // for HMAC verification
@@ -79,10 +79,10 @@ These structures provide:
 
 ```go
 // Cursor-based incremental extraction
-func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorTune, error) {
+func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorOptions, error) {
     startCursor, _ := param.State.GetReplicaProps()["start_cursor"].(string)
 
-    return &models.RESTAPISourceCursorTune{
+    return &models.RESTAPISourceCursorOptions{
         Path:        "/api/v1/events?limit=200",
         CursorParam: "cursor",
         CursorValue: startCursor,
@@ -109,8 +109,8 @@ func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) 
 }
 
 // Offset-based pagination
-func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateTune, error) {
-    return &models.RESTAPISourcePaginateTune{
+func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateOptions, error) {
+    return &models.RESTAPISourcePaginateOptions{
         Method:   "GET",
         Path:     "/api/v1/records",
         MaxPages: 0, // unlimited
@@ -134,8 +134,8 @@ func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch
 }
 
 // Webhook listener
-func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookTune, error) {
-    return &models.RESTAPISourceWebhookTune{
+func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookOptions, error) {
+    return &models.RESTAPISourceWebhookOptions{
         ListenAddr:       ":8080",
         Path:             "/webhook/events",
         Secret:           "my-webhook-secret",

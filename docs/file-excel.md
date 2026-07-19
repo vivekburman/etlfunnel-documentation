@@ -1,0 +1,206 @@
+# Excel
+
+Excel workbooks serve as file-based components in ETL pipelines, functioning both as source systems for data extraction and destination systems for data loading. Our ETL tool reads and writes multi-part `.xlsx` directories, targeting a single sheet per connector, with an engine-driven full scan and a user-defined capture mode for full control over parsing.
+
+## Source Operations
+
+Excel workbooks can serve as data sources using two extraction approaches, each optimized for different use cases.
+
+### Data Extraction Methods
+
+The Excel source interface supports two extraction approaches through these interface methods:
+
+```go
+type IClientDBExcelSource interface {
+    GenerateScan(param *models.ExcelSourceScan) (*models.ExcelSourceScanOptions, error)
+    FetchRecords(param *models.ExcelSourceFetch) <-chan *models.Record
+}
+```
+
+- **Full Scan** - The engine opens each part workbook in turn, reads the configured sheet with `excelize`, and streams rows as records — no client parsing code required
+- **User-Defined** - Gives clients full control over parsing; the engine still calls `GenerateScan` first to resolve the file list, then hands your `FetchRecords` implementation the opened `*excelize.File` for each part in turn
+
+### Source Configuration Structure
+
+When configuring Excel as a source, the system uses these struct definitions:
+
+```go
+// Source operations
+type ExcelSourceScan struct {
+    State              IPipelineRuntimeState
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+
+type ExcelSourceFetch struct {
+    State              IPipelineRuntimeState
+    SourceDBConn       *excelize.File
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+
+type ExcelSourceScanOptions struct {
+    Files          []string
+    SheetName      string
+    SheetIndex     int // 0-based, used when SheetName is empty
+    HasHeader      *bool
+    RowLimit       int
+    StartAfterPart int
+    StartAfterRow  int
+}
+```
+
+These structures provide:
+
+- **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
+- **Source DB Connection** - The opened `*excelize.File` handle for the part currently being streamed, available on `ExcelSourceFetch` (user-defined mode only)
+- **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
+- **Files** - Part filenames (relative to the connector's configured directory) to read, in order
+- **SheetName / SheetIndex** - Target sheet, by name or 0-based index (index used only when `SheetName` is empty)
+- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint)
+
+### Record Position Metadata
+
+Full-scan reads stamp each delivered record's `Meta` with its position, using the shared file-source Meta-key constants:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_file_part` | `models.MetaFilePart` | 0-based index into `Files` |
+| `_file_row` | `models.MetaFileRow` | 0-based row index within that file, resets per file |
+
+Client-authored checkpoint hooks should reference these constants rather than raw string literals so producer and consumer can't drift apart.
+
+### Example Source
+
+```go
+func (c *IUseConnector) GenerateScan(param *models.ExcelSourceScan) (*models.ExcelSourceScanOptions, error) {
+    hasHeader := true
+    return &models.ExcelSourceScanOptions{
+        Files:     []string{"orders_2024.xlsx"},
+        SheetName: "Orders",
+        HasHeader: &hasHeader,
+    }, nil
+}
+
+// FetchRecords is only invoked in user-defined capture mode.
+func (c *IUseConnector) FetchRecords(param *models.ExcelSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
+
+    go func() {
+        defer close(ch)
+
+        rows, err := param.SourceDBConn.GetRows("Orders")
+        if err != nil || len(rows) == 0 {
+            return
+        }
+
+        header := rows[0]
+        for _, row := range rows[1:] {
+            data := make(map[string]any, len(header))
+            for i, col := range header {
+                if i < len(row) {
+                    data[col] = row[i]
+                }
+            }
+            ch <- &models.Record{Data: data}
+        }
+    }()
+
+    return ch
+}
+```
+
+## Destination Operations
+
+Excel workbooks can also function as destinations for processed data, writing sequential, size-capped part workbooks.
+
+### Data Loading Capabilities
+
+The Excel destination interface provides structured data loading operations:
+
+```go
+type IClientDBExcelDest interface {
+    GenerateQuery(param *models.ExcelDestQuery) ([]*models.ExcelDestWritePayload, error)
+    GenerateOptions(param *models.ExcelDestQuery) (*models.ExcelDestOptions, error)
+}
+```
+
+This interface enables:
+
+- **Batch Processing** - Receives a batch of records and returns one write payload per record
+- **Options Generation** - A one-time hook, called before the pipeline starts writing, that controls the target sheet and part-rotation behavior (`WriteMode`, `FilePrefix`, `MaxRecordsPerPart`)
+
+### Destination Configuration Structure
+
+When using Excel as a destination, the system uses these struct definitions:
+
+```go
+// Destination operations
+type ExcelDestQuery struct {
+    State              IPipelineRuntimeState
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseEngine
+}
+
+type ExcelDestOptions struct {
+    SheetName         string
+    SheetIndex        int // 0-based, used when SheetName is empty
+    HasHeader         *bool
+    MaxRecordsPerPart int
+    WriteMode         string // "overwrite" clears existing parts first; anything else appends new parts
+    FilePrefix        string
+}
+
+type ExcelDestWritePayload struct {
+    Rows []map[string]any
+}
+```
+
+This structure manages:
+
+- **Pipeline State** - Runtime state interface providing pipeline context and logger
+- **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
+- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically
+
+### Example Destination
+
+```go
+func (c *IUseConnector) GenerateOptions(param *models.ExcelDestQuery) (*models.ExcelDestOptions, error) {
+    hasHeader := true
+    return &models.ExcelDestOptions{
+        SheetName:         "Export",
+        HasHeader:         &hasHeader,
+        MaxRecordsPerPart: 50000,
+        WriteMode:         "overwrite",
+        FilePrefix:        "export",
+    }, nil
+}
+
+func (c *IUseConnector) GenerateQuery(param *models.ExcelDestQuery) ([]*models.ExcelDestWritePayload, error) {
+    rows := make([]map[string]any, 0, len(param.Records))
+
+    for _, rec := range param.Records {
+        rows = append(rows, rec.Data)
+    }
+
+    return []*models.ExcelDestWritePayload{
+        {Rows: rows},
+    }, nil
+}
+```
+
+## Connection Casting
+
+Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*excelize.File` from a generic `IDatabaseEngine` (e.g. an auxiliary connection), use the shared generic helper directly:
+
+```go
+// Cast IDatabaseEngine to the underlying Excel workbook handle
+workbook, err := cast.FromPointer[excelize.File](engine)
+if err != nil {
+    return fmt.Errorf("failed to cast to Excel workbook handle: %v", err)
+}
+
+// workbook is of type *excelize.File
+```
+
+:::tip Connection Casting
+`FetchRecords` already receives the concrete `*excelize.File` via `SourceDBConn` — you only need `cast.FromPointer` when working with an Excel connection reached through `AuxiliaryDBConnMap`.
+:::

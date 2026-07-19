@@ -13,9 +13,9 @@ The PostgreSQL source interface supports four primary extraction approaches thro
 ```go
 type IClientDBPostgresSource interface {
     FetchRecords(param *models.PostgresSourceFetch) <-chan *models.Record
-    GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryTune, error)
-    GenerateNotification(param *models.PostgresSourceNotification) (*models.PostgresSourceNotificationTune, error)
-    GenerateWAL(param *models.PostgresSourceWAL) (*models.PostgresSourceWALTune, error)
+    GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryOptions, error)
+    GenerateNotification(param *models.PostgresSourceNotification) (*models.PostgresSourceNotificationOptions, error)
+    GenerateWAL(param *models.PostgresSourceWAL) (*models.PostgresSourceWALOptions, error)
 }
 ```
 
@@ -51,16 +51,16 @@ type PostgresSourceWAL struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type PostgresSourceQueryTune struct {
+type PostgresSourceQueryOptions struct {
     Query string
 }
 
-type PostgresSourceNotificationTune struct {
+type PostgresSourceNotificationOptions struct {
     ParseFn     func(PostgresRawNotification) (map[string]any, error)
     ChannelName string
 }
 
-type PostgresSourceWALTune struct {
+type PostgresSourceWALOptions struct {
     ParseFn         func(PostgresChangeEvent) (map[string]any, error)
     SlotName        string
     OutputPlugin    PostgresCDCOutputPluginType
@@ -91,7 +91,7 @@ These structures provide:
 
 ### PostgresChangeEvent
 
-`PostgresChangeEvent` is the typed value the engine passes to the `ParseFn` of `PostgresSourceWALTune`. All fields are populated by the engine before your function is called.
+`PostgresChangeEvent` is the typed value the engine passes to the `ParseFn` of `PostgresSourceWALOptions`. All fields are populated by the engine before your function is called.
 
 ```go
 type PostgresChangeEvent struct {
@@ -161,14 +161,14 @@ func (c *IUseConnector) FetchRecords(param *models.PostgresSourceFetch) <-chan *
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.State.GetName())
-    return &models.PostgresSourceQueryTune{Query: query}, nil
+    return &models.PostgresSourceQueryOptions{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateNotification(param *models.PostgresSourceNotification) (*models.PostgresSourceNotificationTune, error) {
+func (c *IUseConnector) GenerateNotification(param *models.PostgresSourceNotification) (*models.PostgresSourceNotificationOptions, error) {
     channelName := fmt.Sprintf("%s_changes", param.State.GetName())
-    return &models.PostgresSourceNotificationTune{
+    return &models.PostgresSourceNotificationOptions{
         ChannelName: channelName,
         ParseFn: func(n models.PostgresRawNotification) (map[string]any, error) {
             return map[string]any{
@@ -179,11 +179,11 @@ func (c *IUseConnector) GenerateNotification(param *models.PostgresSourceNotific
     }, nil
 }
 
-func (c *IUseConnector) GenerateWAL(param *models.PostgresSourceWAL) (*models.PostgresSourceWALTune, error) {
+func (c *IUseConnector) GenerateWAL(param *models.PostgresSourceWAL) (*models.PostgresSourceWALOptions, error) {
     slotName := fmt.Sprintf("%s_slot", param.State.GetName())
     publicationName := fmt.Sprintf("%s_pub", param.State.GetName())
 
-    return &models.PostgresSourceWALTune{
+    return &models.PostgresSourceWALOptions{
         SlotName:        slotName,
         OutputPlugin:    models.PostgresCDCTypePGOutput,
         Streaming:       true,

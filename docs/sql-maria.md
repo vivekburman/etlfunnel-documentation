@@ -13,8 +13,8 @@ The MariaDB source interface supports three primary extraction approaches throug
 ```go
 type IClientDBMariaSource interface {
     FetchRecords(param *models.MariaSourceFetch) <-chan *models.Record
-    GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error)
-    GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error)
+    GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryOptions, error)
+    GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogOptions, error)
 }
 ```
 
@@ -44,11 +44,11 @@ type MariaSourceBinlog struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MariaSourceQueryTune struct {
+type MariaSourceQueryOptions struct {
     Query string
 }
 
-type MariaSourceBinlogTune struct {
+type MariaSourceBinlogOptions struct {
     ParseFn  func(MariaChangeEvent) (map[string]any, error)
     ServerID uint32
 }
@@ -63,7 +63,7 @@ These structures provide:
 
 ### MariaChangeEvent
 
-`MariaChangeEvent` is the typed value the engine passes to the `ParseFn` of `MariaSourceBinlogTune`. All fields are populated by the engine before your function is called.
+`MariaChangeEvent` is the typed value the engine passes to the `ParseFn` of `MariaSourceBinlogOptions`. All fields are populated by the engine before your function is called.
 
 ```go
 type MariaChangeEvent struct {
@@ -131,13 +131,13 @@ func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan *mod
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.State.GetName())
-    return &models.MariaSourceQueryTune{Query: query}, nil
+    return &models.MariaSourceQueryOptions{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error) {
-    return &models.MariaSourceBinlogTune{
+func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogOptions, error) {
+    return &models.MariaSourceBinlogOptions{
         ServerID: 1234, // unique replication client ID
         ParseFn: func(event models.MariaChangeEvent) (map[string]any, error) {
             record := event.After

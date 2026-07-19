@@ -13,9 +13,9 @@ The SQL Server source interface supports four primary extraction approaches thro
 ```go
 type IClientDBMicrosoftServerSource interface {
     FetchRecords(param *models.MicrosoftServerSourceFetch) <-chan *models.Record
-    GenerateQuery(param *models.MicrosoftServerSourceQuery) (*models.MicrosoftServerSourceQueryTune, error)
-    GenerateCDC(param *models.MicrosoftServerSourceCDC) (*models.MicrosoftServerSourceCDCTune, error)
-    GenerateServiceBroker(param *models.MicrosoftServerSourceServiceBroker) (*models.MicrosoftServerServiceBrokerTune, error)
+    GenerateQuery(param *models.MicrosoftServerSourceQuery) (*models.MicrosoftServerSourceQueryOptions, error)
+    GenerateCDC(param *models.MicrosoftServerSourceCDC) (*models.MicrosoftServerSourceCDCOptions, error)
+    GenerateServiceBroker(param *models.MicrosoftServerSourceServiceBroker) (*models.MicrosoftServerServiceBrokerOptions, error)
 }
 ```
 
@@ -51,11 +51,11 @@ type MicrosoftServerSourceServiceBroker struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MicrosoftServerSourceQueryTune struct {
+type MicrosoftServerSourceQueryOptions struct {
     Query string
 }
 
-type MicrosoftServerSourceCDCTune struct {
+type MicrosoftServerSourceCDCOptions struct {
     ParseFn      func(MSSQLChangeEvent) (map[string]any, error)
     StartTime    time.Time
     EndTime      time.Time
@@ -67,7 +67,7 @@ type MicrosoftServerSourceCDCTune struct {
     UseMinMaxLSN bool
 }
 
-type MicrosoftServerServiceBrokerTune struct {
+type MicrosoftServerServiceBrokerOptions struct {
     ParseFn    func(MSSQLServiceBrokerRawMessage) (map[string]any, error)
     QueueName  string
     SchemaName string
@@ -98,7 +98,7 @@ These structures provide:
 
 ### MSSQLChangeEvent
 
-`MSSQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MicrosoftServerSourceCDCTune`. All fields are populated by the engine before your function is called.
+`MSSQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MicrosoftServerSourceCDCOptions`. All fields are populated by the engine before your function is called.
 
 ```go
 type MSSQLChangeEvent struct {
@@ -171,16 +171,16 @@ func (c *IUseConnector) FetchRecords(param *models.MicrosoftServerSourceFetch) <
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MicrosoftServerSourceQuery) (*models.MicrosoftServerSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MicrosoftServerSourceQuery) (*models.MicrosoftServerSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT TOP 10 * FROM %s", param.State.GetName())
-    return &models.MicrosoftServerSourceQueryTune{Query: query}, nil
+    return &models.MicrosoftServerSourceQueryOptions{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateCDC(param *models.MicrosoftServerSourceCDC) (*models.MicrosoftServerSourceCDCTune, error) {
+func (c *IUseConnector) GenerateCDC(param *models.MicrosoftServerSourceCDC) (*models.MicrosoftServerSourceCDCOptions, error) {
     endTime := time.Now()
     startTime := endTime.Add(-1 * time.Hour)
 
-    return &models.MicrosoftServerSourceCDCTune{
+    return &models.MicrosoftServerSourceCDCOptions{
         StartTime:    startTime,
         EndTime:      endTime,
         UseMinMaxLSN: true,
@@ -198,8 +198,8 @@ func (c *IUseConnector) GenerateCDC(param *models.MicrosoftServerSourceCDC) (*mo
     }, nil
 }
 
-func (c *IUseConnector) GenerateServiceBroker(param *models.MicrosoftServerSourceServiceBroker) (*models.MicrosoftServerServiceBrokerTune, error) {
-    return &models.MicrosoftServerServiceBrokerTune{
+func (c *IUseConnector) GenerateServiceBroker(param *models.MicrosoftServerSourceServiceBroker) (*models.MicrosoftServerServiceBrokerOptions, error) {
+    return &models.MicrosoftServerServiceBrokerOptions{
         QueueName:  param.State.GetName() + "_queue",
         SchemaName: "dbo",
         Timeout:    30000, // 30 seconds

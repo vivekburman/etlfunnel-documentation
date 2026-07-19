@@ -10,7 +10,7 @@ The Cassandra source interface supports two extraction approaches:
 
 ```go
 type IClientDBCassandraSource interface {
-    GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryTune, error)
+    GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryOptions, error)
     FetchRecords(param *models.CassandraSourceFetch) <-chan *models.Record
 }
 ```
@@ -32,9 +32,9 @@ type CassandraSourceFetch struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-// CassandraSourceQueryTune describes a CQL SELECT to execute against Cassandra.
+// CassandraSourceQueryOptions describes a CQL SELECT to execute against Cassandra.
 // PageState is the continuation token returned by a previous page; leave nil for the first page.
-type CassandraSourceQueryTune struct {
+type CassandraSourceQueryOptions struct {
     Parameters []any
     PageState  []byte
     CQL        string
@@ -52,12 +52,12 @@ These structures provide:
 ### Example Source
 
 ```go
-func (c *IUseConnector) GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryTune, error) {
+func (c *IUseConnector) GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryOptions, error) {
     cql := fmt.Sprintf(
         "SELECT * FROM %s WHERE status = ? ALLOW FILTERING",
         param.State.GetName(),
     )
-    return &models.CassandraSourceQueryTune{
+    return &models.CassandraSourceQueryOptions{
         CQL:        cql,
         Parameters: []any{"active"},
         PageSize:   500,

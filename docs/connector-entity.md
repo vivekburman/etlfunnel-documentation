@@ -49,7 +49,7 @@ type IUseConnector struct {
 // Ensure the struct implements the required interface
 var _ coreinterface.IClientDBPostgresSource = (*IUseConnector)(nil)
 
-func (d *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryTune, error) {
+func (d *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*models.PostgresSourceQueryOptions, error) {
 	query := `
 		SELECT t.id, t.name, t.updated_at, u.email
 		FROM public.orders t
@@ -59,7 +59,7 @@ func (d *IUseConnector) GenerateQuery(param *models.PostgresSourceQuery) (*model
 		ORDER BY t.updated_at ASC
 		LIMIT 100
 	`
-	return &models.PostgresSourceQueryTune{Query: query}, nil
+	return &models.PostgresSourceQueryOptions{Query: query}, nil
 }
 
 // FetchRecords, GenerateNotification, and GenerateWAL are unused — this
@@ -71,11 +71,11 @@ func (d *IUseConnector) FetchRecords(_ *models.PostgresSourceFetch) <-chan *mode
 	return ch
 }
 
-func (d *IUseConnector) GenerateNotification(_ *models.PostgresSourceNotification) (*models.PostgresSourceNotificationTune, error) {
+func (d *IUseConnector) GenerateNotification(_ *models.PostgresSourceNotification) (*models.PostgresSourceNotificationOptions, error) {
 	return nil, fmt.Errorf("notification-based capture not implemented")
 }
 
-func (d *IUseConnector) GenerateWAL(_ *models.PostgresSourceWAL) (*models.PostgresSourceWALTune, error) {
+func (d *IUseConnector) GenerateWAL(_ *models.PostgresSourceWAL) (*models.PostgresSourceWALOptions, error) {
 	return nil, fmt.Errorf("WAL-based capture not implemented")
 }
 

@@ -13,7 +13,7 @@ The Elasticsearch source interface supports two primary extraction approaches th
 ```go
 type IClientDBElasticSource interface {
     FetchRecords(param *models.ElasticSourceFetch) <-chan *models.Record
-    GenerateQuery(request *models.ElasticSourceQuery) (*models.ElasticQueryTune, error)
+    GenerateQuery(request *models.ElasticSourceQuery) (*models.ElasticQueryOptions, error)
 }
 ```
 
@@ -37,7 +37,7 @@ type ElasticSourceQuery struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type ElasticQueryTune struct {
+type ElasticQueryOptions struct {
     Body          any
     QueryType     DBElasticsearchQueryType
     Index         string
@@ -132,7 +132,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan *m
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models.ElasticQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models.ElasticQueryOptions, error) {
     query := map[string]interface{}{
         "query": map[string]interface{}{
             "match_all": map[string]interface{}{},
@@ -140,7 +140,7 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models
         "size": 10,
     }
 
-    return &models.ElasticQueryTune{
+    return &models.ElasticQueryOptions{
         QueryType:     models.ElasticsearchQueryTypeSearch,
         Index:         param.State.GetName(),
         Body:          query,

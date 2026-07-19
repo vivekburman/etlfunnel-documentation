@@ -13,8 +13,8 @@ The Oracle source interface supports three primary extraction approaches through
 ```go
 type IClientDBOracleSource interface {
     FetchRecords(param *models.OracleSourceFetch) <-chan *models.Record
-    GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error)
-    GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error)
+    GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryOptions, error)
+    GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error)
 }
 ```
 
@@ -44,13 +44,13 @@ type OracleSourceCDC struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type OracleSourceQueryTune struct {
+type OracleSourceQueryOptions struct {
     Query           string
     RecordsPerBatch int
     PrefetchSize    int
 }
 
-type OracleSourceCDCTune struct {
+type OracleSourceCDCOptions struct {
     ParseFn                func(OracleChangeEvent) (map[string]any, error)
     StartTime              time.Time
     SourceTables           []string
@@ -80,7 +80,7 @@ These structures provide:
 
 ### OracleChangeEvent
 
-`OracleChangeEvent` is the typed value the engine passes to the `ParseFn` of `OracleSourceCDCTune`. All fields are populated by the engine before your function is called.
+`OracleChangeEvent` is the typed value the engine passes to the `ParseFn` of `OracleSourceCDCOptions`. All fields are populated by the engine before your function is called.
 
 ```go
 type OracleChangeEvent struct {
@@ -161,17 +161,17 @@ func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan *mo
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.State.GetName())
-    return &models.OracleSourceQueryTune{
+    return &models.OracleSourceQueryOptions{
         Query:           query,
         RecordsPerBatch: 1000,
         PrefetchSize:    100,
     }, nil
 }
 
-func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error) {
-    return &models.OracleSourceCDCTune{
+func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error) {
+    return &models.OracleSourceCDCOptions{
         SourceTables:           []string{param.State.GetName()},
         SCNType:                "CURRENT",
         ExtractionMode:         "HOTLOG",

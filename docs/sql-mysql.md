@@ -13,8 +13,8 @@ The MySQL source interface supports three primary extraction approaches through 
 ```go
 type IClientDBMySQLSource interface {
     FetchRecords(param *models.MySQLSourceFetch) <-chan *models.Record
-    GenerateQuery(param *models.MySQLSourceQuery) (*models.MySQLSourceQueryTune, error)
-    GenerateBinLog(pram *models.MySQLSourceBinlog) (*models.MySQLSourceBinlogTune, error)
+    GenerateQuery(param *models.MySQLSourceQuery) (*models.MySQLSourceQueryOptions, error)
+    GenerateBinLog(pram *models.MySQLSourceBinlog) (*models.MySQLSourceBinlogOptions, error)
 }
 ```
 
@@ -44,11 +44,11 @@ type MySQLSourceBinlog struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MySQLSourceQueryTune struct {
+type MySQLSourceQueryOptions struct {
     Query string
 }
 
-type MySQLSourceBinlogTune struct {
+type MySQLSourceBinlogOptions struct {
     ParseFn  func(MySQLChangeEvent) (map[string]any, error)
     ServerID uint32
 }
@@ -63,7 +63,7 @@ These structures provide:
 
 ### MySQLChangeEvent
 
-`MySQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MySQLSourceBinlogTune`. All fields are populated by the engine before your function is called.
+`MySQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MySQLSourceBinlogOptions`. All fields are populated by the engine before your function is called.
 
 ```go
 type MySQLChangeEvent struct {
@@ -127,13 +127,13 @@ func (c *IUseConnector) FetchRecords(param *models.MySQLSourceFetch) <-chan *mod
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MySQLSourceQuery) (*models.MySQLSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MySQLSourceQuery) (*models.MySQLSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.State.GetName())
-    return &models.MySQLSourceQueryTune{Query: query}, nil
+    return &models.MySQLSourceQueryOptions{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateBinLog(param *models.MySQLSourceBinlog) (*models.MySQLSourceBinlogTune, error) {
-    return &models.MySQLSourceBinlogTune{
+func (c *IUseConnector) GenerateBinLog(param *models.MySQLSourceBinlog) (*models.MySQLSourceBinlogOptions, error) {
+    return &models.MySQLSourceBinlogOptions{
         ServerID: 1234, // unique replication client ID
         ParseFn: func(event models.MySQLChangeEvent) (map[string]any, error) {
             record := event.After

@@ -12,9 +12,9 @@ The MongoDB source interface supports four primary extraction approaches through
 
 ```go
 type IClientDBMongoSource interface {
-    GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error)
-    GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error)
-    GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error)
+    GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryOptions, error)
+    GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsOptions, error)
+    GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogOptions, error)
     FetchRecords(param *models.MongoSourceFetch) <-chan *models.Record
 }
 ```
@@ -51,17 +51,17 @@ type MongoSourceOplog struct {
     AuxiliaryDBConnMap map[string]IDatabaseEngine
 }
 
-type MongoSourceQueryTune struct {
+type MongoSourceQueryOptions struct {
     CommandDoc bson.D
 }
 
-type MongoStreamsTune struct {
+type MongoStreamsOptions struct {
     Collection          string
     ChangeStreamOptions options.ChangeStreamOptionsBuilder
     Pipeline            []bson.M
 }
 
-type MongoSourceOplogTune struct {
+type MongoSourceOplogOptions struct {
     Collection string
     Filter     bson.M
     Options    options.FindOptionsBuilder
@@ -74,7 +74,7 @@ These structures provide:
 - **Source DB Connection** - MongoDB client instance for document extraction, available on `MongoSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BSON Command Documents** - Native MongoDB query format for flexible document operations
-- **Collection** - `MongoStreamsTune` and `MongoSourceOplogTune` each carry the target collection name alongside their filter/pipeline
+- **Collection** - `MongoStreamsOptions` and `MongoSourceOplogOptions` each carry the target collection name alongside their filter/pipeline
 
 ### Example Source Implementation
 
@@ -106,16 +106,16 @@ func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan *mod
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryOptions, error) {
     pipeline := bson.D{
         {"$match", bson.M{"status": "active"}},
         {"$sort", bson.M{"created_at": -1}},
         {"$limit", 10},
     }
-    return &models.MongoSourceQueryTune{CommandDoc: pipeline}, nil
+    return &models.MongoSourceQueryOptions{CommandDoc: pipeline}, nil
 }
 
-func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error) {
+func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsOptions, error) {
     pipeline := []bson.M{
         {"$match", bson.M{"operationType": bson.M{"$in": []string{"insert", "update"}}}},
     }
@@ -124,14 +124,14 @@ func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*model
         SetFullDocument("updateLookup").
         SetBatchSize(100)
 
-    return &models.MongoStreamsTune{
+    return &models.MongoStreamsOptions{
         Collection:          param.State.GetName(),
         ChangeStreamOptions: *opts,
         Pipeline:            pipeline,
     }, nil
 }
 
-func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error) {
+func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogOptions, error) {
     filter := bson.M{
         "ts": bson.M{"$gte": time.Now().Add(-1 * time.Hour)},
         "ns": bson.M{"$regex": "^etl\\." + param.State.GetName()},
@@ -141,7 +141,7 @@ func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*
         SetSort(bson.M{"$natural": 1}).
         SetNoCursorTimeout(true)
 
-    return &models.MongoSourceOplogTune{
+    return &models.MongoSourceOplogOptions{
         Collection: param.State.GetName(),
         Filter:     filter,
         Options:    *opts,

@@ -12,9 +12,9 @@ The Redis source interface supports four primary extraction approaches through t
 
 ```go
 type IClientDBRedisSource interface {
-    GenerateKeys(param *models.RedisSourceKeys) (*models.RedisSourceKeysTune, error)
-    GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsTune, error)
-    GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesTune, error)
+    GenerateKeys(param *models.RedisSourceKeys) (*models.RedisSourceKeysOptions, error)
+    GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsOptions, error)
+    GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesOptions, error)
     FetchRecords(param *models.RedisSourceFetch) <-chan *models.Record
 }
 ```
@@ -67,14 +67,14 @@ type RedisRawKeySpaceEvent struct {
     Key     string
 }
 
-type RedisSourceKeysTune struct {
+type RedisSourceKeysOptions struct {
     ParseFn         func(RedisRawValue) (map[string]any, error)
     SpecificKeyList []string
     KeyPatterns     []string
     ScanCount       int
 }
 
-type RedisSourceStreamsTune struct {
+type RedisSourceStreamsOptions struct {
     ConsumerGroup   string
     ConsumerName    string
     SpecificStartId string
@@ -86,7 +86,7 @@ type RedisSourceStreamsTune struct {
     AutoAck         bool
 }
 
-type RedisSourceKeySpacesTune struct {
+type RedisSourceKeySpacesOptions struct {
     ParseFn           func(RedisRawKeySpaceEvent) (map[string]any, error)
     NotificationTypes []string
     KeyPatterns       []string
@@ -114,8 +114,8 @@ These structures provide:
 ### Example Source
 
 ```go
-func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.RedisSourceKeysTune, error) {
-    return &models.RedisSourceKeysTune{
+func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.RedisSourceKeysOptions, error) {
+    return &models.RedisSourceKeysOptions{
         SpecificKeyList: []string{"user:*", "session:*"},
         KeyPatterns:     []string{"cache:*", "temp:*"},
         ScanCount:       100,
@@ -130,8 +130,8 @@ func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.Red
     }, nil
 }
 
-func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsTune, error) {
-    return &models.RedisSourceStreamsTune{
+func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsOptions, error) {
+    return &models.RedisSourceStreamsOptions{
         StreamNames:     []string{param.State.GetName() + ":events"},
         ConsumerGroup:   "etl-group",
         ConsumerName:    "etl-consumer-1",
@@ -144,8 +144,8 @@ func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*mode
     }, nil
 }
 
-func (c *IUseConnector) GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesTune, error) {
-    return &models.RedisSourceKeySpacesTune{
+func (c *IUseConnector) GenerateKeyspace(param *models.RedisSourceKeyspace) (*models.RedisSourceKeySpacesOptions, error) {
+    return &models.RedisSourceKeySpacesOptions{
         NotificationTypes: []string{"KEA"},
         KeyPatterns:       []string{"user:*", "session:*"},
         Database:          0,
