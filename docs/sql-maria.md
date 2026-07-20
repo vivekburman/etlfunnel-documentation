@@ -49,8 +49,7 @@ type MariaSourceQueryOptions struct {
 }
 
 type MariaSourceBinlogOptions struct {
-    ParseFn  func(MariaChangeEvent) (map[string]any, error)
-    ServerID uint32
+    ParseFn func(MariaChangeEvent) (map[string]any, error)
 }
 ```
 
@@ -61,6 +60,8 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
 
+The replication server ID is configured once, at the connection level — the **Server ID** parameter on the [MariaDB Connector](connector-hub.md#mariadb-connector) — and is what actually registers with the MariaDB master.
+
 ### MariaChangeEvent
 
 `MariaChangeEvent` is the typed value the engine passes to the `ParseFn` of `MariaSourceBinlogOptions`. All fields are populated by the engine before your function is called.
@@ -69,7 +70,6 @@ These structures provide:
 type MariaChangeEvent struct {
     Before    map[string]any
     After     map[string]any
-    Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
@@ -102,7 +102,6 @@ const (
 | `XID` | Transaction id, populated for `XIDEvent`-based changes. |
 | `GTID` | MariaDB global transaction id, populated for `MariadbGTIDEvent`-based changes. |
 | `Timestamp` | Binlog event header timestamp for row events. |
-| `Meta` | Source-specific extras. |
 
 ### Example Source
 ```go
@@ -138,7 +137,6 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.M
 
 func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogOptions, error) {
     return &models.MariaSourceBinlogOptions{
-        ServerID: 1234, // unique replication client ID
         ParseFn: func(event models.MariaChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {

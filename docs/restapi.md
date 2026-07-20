@@ -39,31 +39,31 @@ type RESTAPIRawResponse struct {
 }
 
 type RESTAPISourcePaginateOptions struct {
-    Headers       map[string]string
-    QueryParams   map[string]string
-    Body          map[string]any // for POST-based pagination
-    Method        string         // GET, POST
-    Path          string         // relative path, e.g. "/v1/reports"
-    PageToken     string         // injected by engine per page
-    MaxPages      int            // 0 = unlimited
-    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error)
-    NextPageToken func(body []byte, headers http.Header) (string, bool)
+    Headers       map[string]string // nil/empty means no extra headers are added
+    QueryParams   map[string]string // nil/empty means no extra query params are added
+    Body          map[string]any    // for POST-based pagination; nil means no body is sent
+    Method        string            // GET, POST — "" has no app default and is passed to http.NewRequestWithContext, which the Go stdlib treats as GET
+    Path          string            // relative path, e.g. "/v1/reports" — no default, required
+    PageToken     string            // injected by engine per page
+    MaxPages      int               // 0 = unlimited
+    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
+    NextPageToken func(body []byte, headers http.Header) (string, bool) // required; the source errors if nil
 }
 
 type RESTAPISourceCursorOptions struct {
-    Path          string
-    CursorParam   string // e.g. "since", "after", "start_date"
-    CursorValue   string // initial cursor value
-    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error)
-    NextPageToken func(body []byte, headers http.Header) (string, bool)
+    Path          string // no default, required
+    CursorParam   string // e.g. "since", "after", "start_date" — no default, used verbatim as the query-param key
+    CursorValue   string // initial cursor value — "" is simply the initial value sent on the first request
+    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
+    NextPageToken func(body []byte, headers http.Header) (string, bool) // required; the source errors if nil
 }
 
 type RESTAPISourceWebhookOptions struct {
-    ListenAddr       string // e.g. ":8081"
-    Path             string // e.g. "/webhook"
-    Secret           string // for HMAC verification
+    ListenAddr       string // e.g. ":8081" — "" has no app default; passed to http.Server{Addr: ""}, which the Go stdlib defaults to ":http" (port 80)
+    Path             string // e.g. "/webhook" — no default, required
+    Secret           string // for HMAC verification — "" (the default) skips HMAC verification entirely; all requests are accepted
     RecordBufferSize int    // channel buffer size; 0 = unbuffered
-    ParseFn          func(RESTAPIRawResponse) ([]map[string]any, error)
+    ParseFn          func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
 }
 ```
 
@@ -74,6 +74,21 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **ParseFn** - Controls how raw HTTP response bytes become pipeline records; the engine never decides the record shape
 - **NextPageToken** - Controls pagination advance; return `("", false)` to signal the source is exhausted
+- **Method** - Left as `""`, requests are sent as GET (the Go stdlib's treatment of an empty method) — there is no app-level default beyond that
+- **MaxPages** - `0` means unlimited pages
+- **Secret** (webhook) - `""` (the zero value) disables HMAC verification entirely, accepting all incoming requests
+- **ListenAddr** (webhook) - `""` is passed straight to `http.Server{Addr: ""}`, which the Go stdlib binds to `:http` (port 80)
+
+### Record Position Metadata
+
+Pagination and cursor reads stamp each delivered record's `Meta` with the token/cursor value that fetched its page:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_restapi_page_token` | `models.MetaRESTAPIPageToken` | The `PageToken` that fetched the record's current page (pagination mode) |
+| `_restapi_cursor` | `models.MetaRESTAPICursor` | The cursor value that fetched the record's current page (cursor mode) |
+
+Like Cassandra's page state, this is page-granularity, not row-granularity: resuming a checkpoint hook with this value re-fetches the whole page from the top rather than risk skipping a row not yet delivered before a crash. Webhook reads never set either key — a webhook delivery has no pagination position to resume from.
 
 ### Example Source
 
@@ -192,12 +207,13 @@ type RESTAPIDestQuery struct {
 }
 
 type RESTAPIDestQueryPayload struct {
-    Headers map[string]string
-    Body    map[string]any
-    Method  string // POST, PUT, PATCH, DELETE
-    Path    string // e.g. "/v1/events"
+    Headers map[string]string // nil means no headers are sent
+    Body    map[string]any    // nil means no body is sent
+    Method  string            // POST, PUT, PATCH, DELETE — "" has no app default and is passed to http.NewRequestWithContext, which the Go stdlib treats as GET
+    Path    string            // e.g. "/v1/events" — no default, required
 }
 
+// RESTAPIDestOptions has no settings today: ApplyOptions is a no-op regardless of content.
 type RESTAPIDestOptions struct{}
 ```
 

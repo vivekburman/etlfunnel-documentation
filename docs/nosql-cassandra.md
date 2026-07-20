@@ -49,6 +49,16 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **PageState** - Opaque continuation token for cursor-based pagination across large result sets
 
+### Record Position Metadata
+
+Query reads stamp each delivered record's `Meta` with the page state that fetched its page:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_cassandra_page_state` | `models.MetaCassandraPageState` | The `PageState` that fetched the record's current page |
+
+This is page-granularity, not row-granularity: gocql only hands back a page state per page fetched, so the value is deliberately lagged by one page boundary rather than using the iterator's own (already-advanced) next-page state. Resuming a checkpoint hook with this value re-fetches the whole page from the top — safe against duplicates, but it means a resume never skips a row that hadn't been delivered yet before a crash.
+
 ### Example Source
 
 ```go

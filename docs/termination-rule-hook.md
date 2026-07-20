@@ -30,11 +30,11 @@ type TerminateRuleProps struct {
 
 ```go
 type TerminateRuleTune struct {
-	MaxRecords           *uint64
-	IdleTimeout          *time.Duration
-	MaxPipelineTime      *time.Duration
+	MaxRecords           *uint64        // nil disables this check entirely — there is no numeric default
+	IdleTimeout          *time.Duration // nil disables this check entirely — there is no default duration
+	MaxPipelineTime      *time.Duration // nil disables this check entirely — there is no default duration
 	UserDefinedCheckFunc func(*models.CustomTerminateRuleCheckProps) (*models.TerminateRuleActionTune, error)
-	CheckInterval        time.Duration
+	CheckInterval        time.Duration // defaults to 1 * time.Second when left at its zero value
 }
 ```
 
@@ -142,7 +142,7 @@ func TerminateRule(param *models.TerminateRuleProps) (*models.TerminateRuleTune,
 
 ## Best Practices
 
-- **Choose Appropriate CheckInterval**: Balance responsiveness with performance overhead (typically 5-30 seconds)
+- **Choose Appropriate CheckInterval**: Balance responsiveness with performance overhead (typically 5-30 seconds); leaving it unset (zero value) defaults to checking every `1 * time.Second`
 - **Log Termination Events**: Always log why a pipeline terminated for debugging and monitoring
 - **Combine Conditions**: Use multiple termination conditions for robust shutdown behavior
 - **Test Termination Logic**: Verify termination rules work correctly in development before production deployment

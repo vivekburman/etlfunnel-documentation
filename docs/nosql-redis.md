@@ -71,21 +71,24 @@ type RedisSourceKeysOptions struct {
     ParseFn         func(RedisRawValue) (map[string]any, error)
     SpecificKeyList []string
     KeyPatterns     []string
-    ScanCount       int
+    ScanCount       int // no app-level default; passed straight through as the SCAN COUNT hint — 0 lets the Redis server apply its own default COUNT
 }
 
 type RedisSourceStreamsOptions struct {
     ConsumerGroup   string
     ConsumerName    string
     SpecificStartId string
-    StartFrom       string
+    StartFrom       string // "$" means "only new entries"; any other value, including "" (the zero value), is treated as a historical read start ID
     StreamNames     []string
-    BatchSize       int
-    BlockTime       int
-    ClaimMinIdle    int
-    AutoAck         bool
+    BatchSize       int  // no default; used as-is for XREAD COUNT
+    BlockTime       int  // no default; used as-is (milliseconds) for XREAD BLOCK — 0 means non-blocking (no BLOCK option sent)
+    ClaimMinIdle    int  // <= 0 skips the pending-message-claim step entirely; > 0 claims messages idle for at least this many milliseconds
+    AutoAck         bool // no default; false (the zero value) means XAck is never called automatically — messages must be acked by the caller
 }
 
+// RedisSourceKeySpacesOptions fields have no default logic — Database,
+// KeyPatterns, NotificationTypes and SubscriptionMode are all used verbatim
+// when building the keyspace-notification subscription channels.
 type RedisSourceKeySpacesOptions struct {
     ParseFn           func(RedisRawKeySpaceEvent) (map[string]any, error)
     NotificationTypes []string
@@ -110,6 +113,10 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for lookup operations
 - **Keys ParseFn** - Controls how raw Redis key values are shaped into pipeline records
 - **Keyspace ParseFn** - Controls how raw keyspace notification events are shaped into pipeline records
+- **ScanCount** - `0` lets the Redis server apply its own default `SCAN COUNT`; there is no app-level substitute
+- **StartFrom** (streams) - `"$"` means "only new entries"; any other value, including `""`, is treated as a historical read start ID
+- **ClaimMinIdle** (streams) - `<= 0` skips claiming pending messages entirely; `> 0` claims messages idle for at least that many milliseconds
+- **AutoAck** (streams) - Defaults to `false`, meaning `XAck` is never called automatically — messages must be acked by the caller
 
 ### Example Source
 

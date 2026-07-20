@@ -61,11 +61,11 @@ type PostgresSourceNotificationOptions struct {
 }
 
 type PostgresSourceWALOptions struct {
-    ParseFn         func(PostgresChangeEvent) (map[string]any, error)
-    SlotName        string
-    OutputPlugin    PostgresCDCOutputPluginType
-    PublicationName string
-    Streaming       bool
+    ParseFn         func(PostgresChangeEvent) (map[string]any, error) // required; the source errors if nil
+    SlotName        string                       // no default — required, used as-is in START_REPLICATION SLOT
+    OutputPlugin    PostgresCDCOutputPluginType   // required to be PG_OUTPUT or WAL2JSON; any other value (including "") errors without starting replication
+    PublicationName string                       // no default — required, used as-is
+    Streaming       bool                         // defaults to false, selecting the v1 logical replication protocol; true selects the streaming (v2) protocol
 }
 
 const (
@@ -86,7 +86,7 @@ These structures provide:
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct PostgreSQL connection instance using pgx driver, available on `PostgresSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
-- **WAL Configuration** - Advanced replication settings with support for multiple output plugins and a `ParseFn` for shaping change events into records
+- **WAL Configuration** - Advanced replication settings with support for multiple output plugins and a `ParseFn` for shaping change events into records. `Streaming` defaults to `false` (v1 logical replication protocol); set it to `true` to opt into the streaming v2 protocol
 - **Notification Channels** - Real-time event processing with a `ParseFn` to transform raw payloads into records
 
 ### PostgresChangeEvent
@@ -97,7 +97,6 @@ These structures provide:
 type PostgresChangeEvent struct {
     Before      map[string]any
     After       map[string]any
-    Meta        map[string]any
     Operation   ChangeEventOperation
     Database    string
     Table       string
@@ -124,7 +123,6 @@ const (
 | `Table` | Source table name. |
 | `Position` | Postgres LSN at the time of the change. |
 | `RelationOID` | Relation OID from the logical replication protocol. |
-| `Meta` | Source-specific extras. |
 
 ### Example Source
 

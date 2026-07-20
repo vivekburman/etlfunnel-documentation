@@ -191,11 +191,11 @@ const (
 // MongoBulkCallSettings groups the bulk-write call options that apply to a
 // whole flush, as opposed to a single payload.
 type MongoBulkCallSettings struct {
-    Ordered          bool
-    BypassValidation bool
-    WriteConcern     *writeconcern.WriteConcern
-    Comment          any
-    Let              any
+    Ordered          bool                       // always applied explicitly via opts.SetOrdered(Ordered); the Go zero value false is used literally — this differs from the MongoDB driver's own BulkWrite default of true, since this app always sets it rather than leaving it unset
+    BypassValidation bool                       // always applied explicitly via opts.SetBypassDocumentValidation(BypassValidation); zero value false
+    WriteConcern     *writeconcern.WriteConcern // only applied when non-nil; nil (the zero value) means the collection's inherited write concern is used
+    Comment          any                        // only set on the call when non-nil
+    Let              any                        // only set on the call when non-nil
 }
 
 // MongoDestOptions is returned by GenerateOptions. Default applies to every
@@ -237,6 +237,10 @@ This structure manages:
 - **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
 - **Connection Management** - Maintains auxiliary database connections for lookups; the destination MongoDB connection itself is managed internally and is not passed through this struct
 - **Operation Configuration** - Specifies write operation type, target collection, and associated per-payload options
+
+:::note `Ordered` default differs from the MongoDB driver
+Leaving `MongoBulkCallSettings.Ordered` unset resolves to the Go zero value `false`, because it's always applied explicitly via `SetOrdered`. This is the opposite of the MongoDB driver's own `BulkWrite` default, which is `true` when the option is left unset entirely. If you want ordered bulk writes, set `Ordered: true` explicitly.
+:::
 
 ### Example Destination Implementation
 

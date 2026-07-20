@@ -68,10 +68,11 @@ type MicrosoftServerSourceCDCOptions struct {
 }
 
 type MicrosoftServerServiceBrokerOptions struct {
-    ParseFn    func(MSSQLServiceBrokerRawMessage) (map[string]any, error)
-    QueueName  string
-    SchemaName string
-    Timeout    int // -1 means never timeout
+    ParseFn    func(MSSQLServiceBrokerRawMessage) (map[string]any, error) // required; the source errors if nil
+    QueueName  string // no default — required
+    SchemaName string // no default — required
+    Timeout    int    // only appends a `, TIMEOUT <n>` clause when >= 0; a negative value omits the clause and waits indefinitely.
+                       // The zero value (0) is NOT "never timeout" — it produces `TIMEOUT 0`, which returns immediately.
 }
 
 const (
@@ -130,6 +131,10 @@ const (
 | `Table` | Source table name. |
 | `Position` | SQL Server LSN at the time of the change. |
 | `Meta` | Source-specific extras. |
+
+:::note MSSQL is the one CDC connector that still carries a `Meta` bag
+`MySQLChangeEvent`, `MariaChangeEvent`, `OracleChangeEvent`, and `PostgresChangeEvent` all expose their per-event extras as typed fields directly on the struct (e.g. `Query`/`XID`, `SCN`/`RedoSQL`, `RelationOID`) rather than a generic `map[string]any`. `MSSQLChangeEvent.Meta` is the one exception, because SQL Server's CDC `__$*` system columns are numerous and driver-specific rather than a small fixed set worth giving individual typed fields.
+:::
 
 ### Example Source
 
@@ -202,7 +207,7 @@ func (c *IUseConnector) GenerateServiceBroker(param *models.MicrosoftServerSourc
     return &models.MicrosoftServerServiceBrokerOptions{
         QueueName:  param.State.GetName() + "_queue",
         SchemaName: "dbo",
-        Timeout:    30000, // 30 seconds
+        Timeout:    30000, // 30 seconds; use a negative value instead to wait indefinitely
         ParseFn: func(msg models.MSSQLServiceBrokerRawMessage) (map[string]any, error) {
             return map[string]any{
                 "body":         string(msg.Body),

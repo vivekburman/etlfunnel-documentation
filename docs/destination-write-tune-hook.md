@@ -6,10 +6,10 @@ Destination Write Rule is a control-plane hook that lets you dynamically adjust 
 
 By default, a pipeline writes records to the destination one at a time (`RecordsPerBatch: 1`). Destination Write Rule gives you two levers:
 
-- **Static sizing**: Set `RecordsPerBatch` in your init return to apply a fixed batch size for the entire run
+- **Static sizing**: Set `RecordsPerBatch` in your init return to apply a fixed batch size for the entire run. Only a positive value is applied — returning `0` or a negative number is silently ignored and the batch size stays at whatever it already was (`1` on a fresh pipeline)
 - **Dynamic sizing**: Supply a `UserDefinedCheckFunc` that is called on every ticker tick. Return a `models.DestinationWriteActionTune` with `NewBatchSize` set to adjust the batch size — the library applies the change. Return `nil` or `NewBatchSize: nil` to leave the current size unchanged.
 
-The hook is evaluated on its own independent ticker and never blocks the main record-processing loop. If `UserDefinedCheckFunc` is `nil`, the batch size is held constant at the value set during initialisation.
+The hook is evaluated on its own independent ticker and never blocks the main record-processing loop. If `UserDefinedCheckFunc` is `nil`, the batch size is held constant at the value set during initialisation. Leaving `CheckInterval` at its zero value defaults the ticker to `1 * time.Second`.
 
 ## Destination Write Rule Specification
 
@@ -34,8 +34,8 @@ type DestinationWriteProps struct {
 
 ```go
 type DestinationWriteTune struct {
-	RecordsPerBatch      int
-	CheckInterval        time.Duration
+	RecordsPerBatch      int           // only applied when > 0; <= 0 is silently ignored and leaves the current batch size unchanged
+	CheckInterval        time.Duration // defaults to 1 * time.Second when left at its zero value
 	UserDefinedCheckFunc func(*models.CustomDestinationWriteCheckProps) (*models.DestinationWriteActionTune, error)
 }
 ```

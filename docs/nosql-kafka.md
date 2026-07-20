@@ -42,21 +42,18 @@ type KafkaSourceFetch struct {
 type KafkaSourceSubscriptionOptions struct {
     Topics            []string
     GroupID           string
-    InitialOffset     int64 // sarama.OffsetNewest or sarama.OffsetOldest
-    MaxWaitTime       time.Duration
-    FetchMaxBytes     int32
-    SessionTimeout    time.Duration
-    HeartbeatInterval time.Duration
-    CommitInterval    time.Duration
-    AutoCommit        bool
+    InitialOffset     int64         // sarama.OffsetNewest or sarama.OffsetOldest — no app default; set unconditionally, so the zero value 0 is used as a literal offset, NOT sarama's own default of OffsetNewest
+    MaxWaitTime       time.Duration // <= 0 leaves sarama's built-in default (250ms); only overridden when > 0
+    FetchMaxBytes     int32         // <= 0 leaves sarama's built-in default (unlimited, 0); only overridden when > 0
+    SessionTimeout    time.Duration // <= 0 leaves sarama's built-in default (10s); only overridden when > 0
+    HeartbeatInterval time.Duration // <= 0 leaves sarama's built-in default (3s); only overridden when > 0
+    CommitInterval    time.Duration // <= 0 leaves sarama's built-in default (1s); only overridden when > 0
     ParseFn           func(KafkaRawMessage) (map[string]any, error)
 }
 
 type KafkaSourceAssignmentOptions struct {
-    Partitions    []KafkaTopicPartition
-    MaxWaitTime   time.Duration
-    FetchMaxBytes int32
-    ParseFn       func(KafkaRawMessage) (map[string]any, error)
+    Partitions []KafkaTopicPartition
+    ParseFn    func(KafkaRawMessage) (map[string]any, error)
 }
 
 // KafkaTopicPartition identifies a specific topic partition and starting offset.
@@ -85,6 +82,10 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **ParseFn** - Controls how raw Kafka message bytes become pipeline records; the engine never decides the record shape
 
+:::note Defaults on `KafkaSourceSubscriptionOptions`
+Leaving `MaxWaitTime`, `FetchMaxBytes`, `SessionTimeout`, `HeartbeatInterval`, or `CommitInterval` at `<= 0` (including the zero value) leaves sarama's own built-in default in place — respectively `250ms`, unlimited (`0`), `10s`, `3s`, and `1s`. `InitialOffset` has no such fallback: it's set unconditionally, so a literal `0` is used as-is rather than falling back to `sarama.OffsetNewest`. Auto-commit is always enabled internally — there is no field to configure it, since manual/checkpoint-gated commits aren't currently supported. `KafkaSourceAssignmentOptions` has no `MaxWaitTime`/`FetchMaxBytes` equivalents — manual partition assignment always reuses the existing client's configuration.
+:::
+
 ### Example Source
 
 ```go
@@ -98,7 +99,6 @@ func (c *IUseConnector) GenerateSubscription(param *models.KafkaSourceSubscribe)
         SessionTimeout:    10 * time.Second,
         HeartbeatInterval: 3 * time.Second,
         CommitInterval:    1 * time.Second,
-        AutoCommit:        true,
         ParseFn: func(msg models.KafkaRawMessage) (map[string]any, error) {
             var payload map[string]any
             if err := json.Unmarshal(msg.Value, &payload); err != nil {
@@ -119,8 +119,6 @@ func (c *IUseConnector) GenerateAssignment(param *models.KafkaSourceAssign) (*mo
             {Topic: param.State.GetName(), Partition: 0, Offset: sarama.OffsetOldest},
             {Topic: param.State.GetName(), Partition: 1, Offset: sarama.OffsetOldest},
         },
-        MaxWaitTime:   500 * time.Millisecond,
-        FetchMaxBytes: 512 * 1024,
         ParseFn: func(msg models.KafkaRawMessage) (map[string]any, error) {
             var payload map[string]any
             if err := json.Unmarshal(msg.Value, &payload); err != nil {
@@ -153,9 +151,11 @@ type IClientDBKafkaDest interface {
 
 This interface enables:
 
-- **Per-record message tuning** - Topic, key, value, partition, and headers per message
+- **Per-record message tuning** - Topic, key, value, and headers per message
 - **Batch processing** - Receives a batch of records and returns one payload per message
 - **Connector Options** - `GenerateOptions` returns a `KafkaDestOptions` value; Kafka currently defines no connector-wide settings, so this struct is empty
+
+There is no per-payload `Partition` field — every message is sent through sarama's configured partitioner (by default, hash-of-key when `Key` is set, otherwise round-robin), so a specific partition cannot be pinned per record.
 
 ### Destination Configuration Structure
 
@@ -168,11 +168,10 @@ type KafkaDestQuery struct {
 }
 
 type KafkaDestQueryPayload struct {
-    Headers   []KafkaHeader
-    Topic     string
-    Key       []byte
-    Value     []byte
-    Partition int32 // -1 for partitioner-assigned
+    Headers []KafkaHeader
+    Topic   string
+    Key     []byte
+    Value   []byte
 }
 
 // KafkaDestOptions currently has no fields; Kafka has no connector-wide
@@ -214,10 +213,9 @@ func (c *IUseConnector) GenerateQuery(param *models.KafkaDestQuery) ([]*models.K
         }
 
         payloads = append(payloads, &models.KafkaDestQueryPayload{
-            Topic:     topic,
-            Key:       []byte(key),
-            Value:     valueBytes,
-            Partition: -1, // let the partitioner assign based on key
+            Topic: topic,
+            Key:   []byte(key),
+            Value: valueBytes,
         })
     }
 

@@ -1,6 +1,6 @@
 # CSV
 
-CSV files serve as file-based components in ETL pipelines, functioning both as source systems for data extraction and destination systems for data loading. Our ETL tool reads and writes multi-part CSV directories, supporting both an engine-driven full scan and a user-defined capture mode for full control over parsing.
+CSV files serve as file-based components in ETL pipelines, functioning both as source systems for data extraction and destination systems for data loading. Our ETL tool reads and writes multi-part CSV directories, supporting both an engine-driven full scan and a user-defined capture mode for full control over parsing. Only UTF-8 encoded files are currently supported.
 
 ## Source Operations
 
@@ -39,12 +39,11 @@ type CSVSourceFetch struct {
 
 type CSVSourceScanOptions struct {
     Files          []string
-    Delimiter      string
-    HasHeader      *bool
-    Encoding       string
-    RowLimit       int
-    StartAfterPart int
-    StartAfterRow  int
+    Delimiter      string // defaults to ',' when empty
+    HasHeader      *bool  // defaults to true when nil
+    RowLimit       int    // 0 = unlimited
+    StartAfterPart int    // 0 = start from the first part
+    StartAfterRow  int    // 0 = start from the first row
 }
 ```
 
@@ -54,7 +53,9 @@ These structures provide:
 - **Source DB Connection** - The `*os.File` handle for the part currently being streamed, available on `CSVSourceFetch` (user-defined mode only)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Files** - Part filenames (relative to the connector's configured directory) to read, in order
-- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint)
+- **Delimiter** - Field separator character; defaults to `,` when left empty
+- **HasHeader** - Whether the first row is a header; defaults to `true` when `nil`
+- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint); `0` means unlimited / start from the very first part or row
 
 ### Record Position Metadata
 
@@ -144,13 +145,11 @@ type CSVDestQuery struct {
 }
 
 type CSVDestOptions struct {
-    Delimiter         string
-    HasHeader         *bool
-    Encoding          string
-    QuoteChar         string
-    MaxRecordsPerPart int
-    WriteMode         string // "overwrite" clears existing parts first; anything else appends new parts
-    FilePrefix        string
+    Delimiter         string // defaults to ',' when empty
+    HasHeader         *bool  // defaults to true when nil
+    MaxRecordsPerPart int    // 0 = unlimited records per part
+    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
+    FilePrefix        string // "" resolves to "part"
 }
 
 type CSVDestWritePayload struct {
@@ -162,7 +161,7 @@ This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
 - **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
-- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically
+- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically; `MaxRecordsPerPart: 0` means unlimited rows per part, and `FilePrefix: ""` resolves to `"part"`
 
 ### Example Destination
 

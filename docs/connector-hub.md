@@ -322,6 +322,18 @@ REST API connector enables integration with any HTTP/HTTPS API endpoint, support
 | Password | Password | - | Password (for basic auth) |
 | TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
 
+**Custom Auth Parameters** (when Auth Type is `custom`):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Token URL | Text | - | Endpoint the connector calls to obtain a token (required) |
+| Method | Dropdown | POST | HTTP method used for the token request; empty resolves to `POST` |
+| Headers | Map | - | Extra headers sent with the token request, e.g. `Content-Type: application/json` |
+| Body | Text | - | Raw request body for the token request |
+| Token Path | Text | - | JSONPath into the token response body, e.g. `$.data.accessToken` (required) |
+| Expiry Path | Text | - | Optional JSONPath to a seconds-until-expiry field in the token response |
+| Token Prefix | Text | Bearer | Prefix applied ahead of the token when set on the outgoing `Authorization` header; empty resolves to `Bearer` |
+
 **Data Processing Strategies:**
 - **By Request**: Execute HTTP requests and stream response data
 - **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`

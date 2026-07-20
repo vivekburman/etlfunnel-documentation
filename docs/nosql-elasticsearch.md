@@ -42,7 +42,7 @@ type ElasticQueryOptions struct {
     QueryType     DBElasticsearchQueryType
     Index         string
     DocumentID    string
-    ScrollTimeout time.Duration
+    ScrollTimeout time.Duration // no default; passed directly as Scroll: ScrollTimeout — the zero value sends no scroll duration to the ES client
 }
 
 const (
@@ -60,6 +60,7 @@ These structures provide:
 - **Source DB Connection** - Direct Elasticsearch client connection for data extraction, available on `ElasticSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Query Types** - Support for various Elasticsearch operations including search, scroll, get, multi-get, and SQL
+- **ScrollTimeout** - Left at its zero value, no scroll duration is sent to the client at all — there is no substituted default
 
 ### Example Source
 
@@ -203,7 +204,7 @@ const (
 // ElasticDestOptions is returned by GenerateOptions and applies to the whole
 // Bulk() request rather than a single payload.
 type ElasticDestOptions struct {
-    RefreshPolicy string
+    RefreshPolicy string // only overwritten when non-empty; "" (the zero value) is passed to Bulk.WithRefresh(""), which Elasticsearch treats as no-refresh — not an app-set default
 }
 ```
 
@@ -213,7 +214,7 @@ This structure manages:
 - **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
 - **Connection Management** - Maintains auxiliary database connections for lookups; the destination Elasticsearch connection itself is managed internally and is not passed through this struct
 - **Operation Types** - Supports various Elasticsearch write operations
-- **Refresh Policies** - Controlled via `ElasticDestOptions.RefreshPolicy` from `GenerateOptions`, applied to the whole bulk request
+- **Refresh Policies** - Controlled via `ElasticDestOptions.RefreshPolicy` from `GenerateOptions`, applied to the whole bulk request; `""` (the zero value) is treated by Elasticsearch as no-refresh, not an app-substituted default
 
 ### Example Destination
 

@@ -40,11 +40,11 @@ type ExcelSourceFetch struct {
 type ExcelSourceScanOptions struct {
     Files          []string
     SheetName      string
-    SheetIndex     int // 0-based, used when SheetName is empty
-    HasHeader      *bool
-    RowLimit       int
-    StartAfterPart int
-    StartAfterRow  int
+    SheetIndex     int    // 0-based, used when SheetName is empty; 0 itself is treated as "unset" (checked as SheetIndex > 0)
+    HasHeader      *bool  // defaults to true when nil
+    RowLimit       int    // 0 = unlimited
+    StartAfterPart int    // 0 = start from the first part
+    StartAfterRow  int    // 0 = start from the first row
 }
 ```
 
@@ -54,8 +54,9 @@ These structures provide:
 - **Source DB Connection** - The opened `*excelize.File` handle for the part currently being streamed, available on `ExcelSourceFetch` (user-defined mode only)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Files** - Part filenames (relative to the connector's configured directory) to read, in order
-- **SheetName / SheetIndex** - Target sheet, by name or 0-based index (index used only when `SheetName` is empty)
-- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint)
+- **SheetName / SheetIndex** - Target sheet, by name or 0-based index (index used only when `SheetName` is empty). An empty `SheetName` falls through to `SheetIndex`, and `SheetIndex: 0` falls through to the first sheet — there is no way to explicitly target sheet 0 by index; use `SheetName` for that
+- **HasHeader** - Whether the first row is a header; defaults to `true` when `nil`
+- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint); `0` means unlimited / start from the very first part or row
 
 ### Record Position Metadata
 
@@ -142,11 +143,11 @@ type ExcelDestQuery struct {
 
 type ExcelDestOptions struct {
     SheetName         string
-    SheetIndex        int // 0-based, used when SheetName is empty
-    HasHeader         *bool
-    MaxRecordsPerPart int
-    WriteMode         string // "overwrite" clears existing parts first; anything else appends new parts
-    FilePrefix        string
+    SheetIndex        int    // 0-based, used when SheetName is empty; same "0 means unset" caveat as ExcelSourceScanOptions
+    HasHeader         *bool  // defaults to true when nil
+    MaxRecordsPerPart int    // 0 = unlimited records per part
+    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
+    FilePrefix        string // "" resolves to "part"
 }
 
 type ExcelDestWritePayload struct {
@@ -158,7 +159,7 @@ This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
 - **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
-- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically
+- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically; `MaxRecordsPerPart: 0` means unlimited rows per part, and `FilePrefix: ""` resolves to `"part"`
 
 ### Example Destination
 

@@ -45,28 +45,21 @@ type OracleSourceCDC struct {
 }
 
 type OracleSourceQueryOptions struct {
-    Query           string
-    RecordsPerBatch int
-    PrefetchSize    int
+    Query           string // no default — required
+    RecordsPerBatch int    // no default; passed straight to godror.PrefetchCount(RecordsPerBatch). 0 (or negative) disables batching
+    PrefetchSize    int    // no default; passed straight to godror.FetchArraySize(PrefetchSize)
 }
 
 type OracleSourceCDCOptions struct {
-    ParseFn                func(OracleChangeEvent) (map[string]any, error)
-    StartTime              time.Time
-    SourceTables           []string
-    IncludeOperations      []string
-    SCNType                string
-    SessionRefreshMode     string
-    ExtractionMode         string
-    PollingInterval        time.Duration
-    SessionRefreshInterval time.Duration
-    RetryJitter            float64
-    StartSCN               uint64
-    BatchSize              int
-    SessionRefreshCount    int
-    MaxRetries             int
-    BaseRetryDelayMs       int
-    MaxRetryDelayMs        int
+    ParseFn           func(OracleChangeEvent) (map[string]any, error) // required; the source errors if nil
+    StartTime         time.Time     // only consulted when SCNType == "timestamp"; converted to an SCN. Zero value converts whatever SCN the DB maps epoch to
+    SourceTables      []string      // empty/nil means no table filter — all tables are read
+    IncludeOperations []string      // empty/nil means no operation filter — all operations (INSERT/UPDATE/DELETE/DDL) are read
+    SCNType           string        // "number" uses StartSCN as-is, "timestamp" resolves StartTime; any other value (including "", the default) falls through to the DB's current SCN
+    ExtractionMode    string        // no default — required to be "HOTLOG" or "ARCHIVE"; any other value errors
+    PollingInterval   time.Duration // no default; passed directly to time.NewTicker, which panics for values <= 0 — effectively required to be positive
+    StartSCN          uint64        // only consulted when SCNType == "number"; used as-is
+    BatchSize         int           // <= 0 means no FETCH FIRST clause is added (unbounded fetch); > 0 adds `FETCH FIRST <BatchSize> ROWS ONLY`
 }
 ```
 
@@ -75,8 +68,12 @@ These structures provide:
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source DB Connection** - Direct Oracle connection instance for data extraction, available on `OracleSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
-- **Advanced CDC Configuration** - Comprehensive change data capture settings with SCN management, retry logic, and session handling
+- **Advanced CDC Configuration** - SCN management and polling-based change tracking
 - **CDC ParseFn** - Controls how raw Oracle change events are shaped into pipeline records
+
+:::note LogMiner sessions are per-poll, not long-lived
+Each poll tick acquires its own connection, calls `START_LOGMNR` with just `STARTSCN` (letting Oracle auto-discover the needed redo/archive log files), queries `V$LOGMNR_CONTENTS`, then ends the session — all within that single tick. There is no persistent LogMiner session across polls, so there's nothing to periodically refresh, and no per-file `ADD_LOGFILE` call to retry with backoff. (An earlier implementation kept a long-lived session with configurable refresh/retry behavior, but `DBMS_LOGMNR.ADD_LOGFILE` raises `ORA-65040` when connected to a Pluggable Database, so that approach was replaced with the current auto-discovery design.) On a transient extraction error, the source simply logs and retries at the next `PollingInterval` tick.
+:::
 
 ### OracleChangeEvent
 
@@ -86,7 +83,6 @@ These structures provide:
 type OracleChangeEvent struct {
     Before    map[string]any
     After     map[string]any
-    Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
@@ -119,7 +115,6 @@ const (
 | `Timestamp` | Time the change was captured. |
 | `RedoSQL` | Redo SQL for the change, when available. |
 | `UndoSQL` | Undo SQL for the change, when available. |
-| `Meta` | Oracle-specific extras. |
 
 ### Example Source
 
@@ -172,18 +167,12 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.
 
 func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error) {
     return &models.OracleSourceCDCOptions{
-        SourceTables:           []string{param.State.GetName()},
-        SCNType:                "CURRENT",
-        ExtractionMode:         "HOTLOG",
-        IncludeOperations:      []string{"INSERT", "UPDATE", "DELETE"},
-        BatchSize:              100,
-        PollingInterval:        5 * time.Second,
-        SessionRefreshMode:     "TIME_BASED",
-        SessionRefreshInterval: 30 * time.Minute,
-        MaxRetries:             3,
-        BaseRetryDelayMs:       500,
-        MaxRetryDelayMs:        10000,
-        RetryJitter:            0.3,
+        SourceTables:      []string{param.State.GetName()},
+        SCNType:           "CURRENT", // anything other than "number"/"timestamp" falls through to the DB's current SCN
+        ExtractionMode:    "HOTLOG",
+        IncludeOperations: []string{"INSERT", "UPDATE", "DELETE"},
+        BatchSize:         100, // <= 0 would mean unbounded fetch
+        PollingInterval:   5 * time.Second,
         ParseFn: func(event models.OracleChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {

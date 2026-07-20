@@ -39,11 +39,11 @@ type JSONSourceFetch struct {
 
 type JSONSourceScanOptions struct {
     Files          []string
-    Lines          *bool
-    RootPath       string
-    RowLimit       int
-    StartAfterPart int
-    StartAfterRow  int
+    Lines          *bool  // defaults to false (nil) — whole-file JSON array mode rather than JSONL
+    RootPath       string // currently unused/dead — never read
+    RowLimit       int    // 0 = unlimited
+    StartAfterPart int    // 0 = start from the first part
+    StartAfterRow  int    // 0 = start from the first row
 }
 ```
 
@@ -53,9 +53,9 @@ These structures provide:
 - **Source DB Connection** - The `*os.File` handle for the part currently being streamed, available on `JSONSourceFetch` (user-defined mode only)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Files** - Part filenames (relative to the connector's configured directory) to read, in order
-- **Lines** - `true` for JSONL/NDJSON (one object per line), `false`/`nil` for a single top-level JSON array
-- **RootPath** - Optional JSON-path-style prefix to descend into before iterating records (e.g. when records are nested under a wrapper object)
-- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint)
+- **Lines** - `true` for JSONL/NDJSON (one object per line), `false`/`nil` (the default) for a single top-level JSON array
+- **RootPath** - Currently unused/dead — declared but never read by the JSON source, despite the name suggesting a nested-object prefix
+- **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint); `0` means unlimited / start from the very first part or row
 
 ### Record Position Metadata
 
@@ -133,10 +133,10 @@ type JSONDestQuery struct {
 }
 
 type JSONDestOptions struct {
-    Lines             *bool
-    MaxRecordsPerPart int
-    WriteMode         string // "overwrite" clears existing parts first; anything else appends new parts
-    FilePrefix        string
+    Lines             *bool  // nil/false is treated as falsy (whole-file JSON array mode) wherever checked
+    MaxRecordsPerPart int    // 0 = unlimited records per part
+    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
+    FilePrefix        string // "" resolves to "part"
 }
 
 type JSONDestWritePayload struct {
@@ -148,7 +148,7 @@ This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
 - **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
-- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically
+- **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically; `MaxRecordsPerPart: 0` means unlimited rows per part, and `FilePrefix: ""` resolves to `"part"`
 
 ### Example Destination
 

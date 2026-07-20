@@ -49,8 +49,7 @@ type MySQLSourceQueryOptions struct {
 }
 
 type MySQLSourceBinlogOptions struct {
-    ParseFn  func(MySQLChangeEvent) (map[string]any, error)
-    ServerID uint32
+    ParseFn func(MySQLChangeEvent) (map[string]any, error)
 }
 ```
 
@@ -61,6 +60,8 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
 
+The replication server ID is configured once, at the connection level — the **Server ID** parameter on the [MySQL Connector](connector-hub.md#mysql-connector) — and is what actually registers with the MySQL master.
+
 ### MySQLChangeEvent
 
 `MySQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MySQLSourceBinlogOptions`. All fields are populated by the engine before your function is called.
@@ -69,7 +70,6 @@ These structures provide:
 type MySQLChangeEvent struct {
     Before    map[string]any
     After     map[string]any
-    Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
@@ -98,7 +98,6 @@ const (
 | `Position` | Replication position (GTID/log position) at the time of the change. |
 | `Query` | Raw DDL/query text, populated for `QueryEvent`-based changes. |
 | `XID` | Transaction id, populated for `XIDEvent`-based changes. |
-| `Meta` | Source-specific extras. |
 
 ### Example Source
 ```go
@@ -134,7 +133,6 @@ func (c *IUseConnector) GenerateQuery(param *models.MySQLSourceQuery) (*models.M
 
 func (c *IUseConnector) GenerateBinLog(param *models.MySQLSourceBinlog) (*models.MySQLSourceBinlogOptions, error) {
     return &models.MySQLSourceBinlogOptions{
-        ServerID: 1234, // unique replication client ID
         ParseFn: func(event models.MySQLChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
