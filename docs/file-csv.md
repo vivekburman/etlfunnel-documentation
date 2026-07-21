@@ -145,16 +145,26 @@ type CSVDestQuery struct {
 }
 
 type CSVDestOptions struct {
-    Delimiter         string // defaults to ',' when empty
-    HasHeader         *bool  // defaults to true when nil
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    Delimiter         string    // defaults to ',' when empty
+    HasHeader         *bool     // defaults to true when nil
+    MaxRecordsPerPart int       // 0 = unlimited records per part
+    WriteMode         WriteMode // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string    // "" resolves to "part"
 }
 
 type CSVDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
 ```
 
 This structure manages:
@@ -171,7 +181,7 @@ func (c *IUseConnector) GenerateOptions(param *models.CSVDestQuery) (*models.CSV
     return &models.CSVDestOptions{
         HasHeader:         &hasHeader,
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }

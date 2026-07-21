@@ -52,15 +52,44 @@ type OracleSourceQueryOptions struct {
 
 type OracleSourceCDCOptions struct {
     ParseFn           func(OracleChangeEvent) (map[string]any, error) // required; the source errors if nil
-    StartTime         time.Time     // only consulted when SCNType == "timestamp"; converted to an SCN. Zero value converts whatever SCN the DB maps epoch to
-    SourceTables      []string      // empty/nil means no table filter — all tables are read
-    IncludeOperations []string      // empty/nil means no operation filter — all operations (INSERT/UPDATE/DELETE/DDL) are read
-    SCNType           string        // "number" uses StartSCN as-is, "timestamp" resolves StartTime; any other value (including "", the default) falls through to the DB's current SCN
-    ExtractionMode    string        // no default — required to be "HOTLOG" or "ARCHIVE"; any other value errors
-    PollingInterval   time.Duration // no default; passed directly to time.NewTicker, which panics for values <= 0 — effectively required to be positive
-    StartSCN          uint64        // only consulted when SCNType == "number"; used as-is
-    BatchSize         int           // <= 0 means no FETCH FIRST clause is added (unbounded fetch); > 0 adds `FETCH FIRST <BatchSize> ROWS ONLY`
+    StartTime         time.Time             // only consulted when SCNType == OracleSCNTypeTimestamp; converted to an SCN. Zero value converts whatever SCN the DB maps epoch to
+    SourceTables      []string              // empty/nil means no table filter — all tables are read
+    IncludeOperations []OracleOperation     // empty/nil means no operation filter — all operations (INSERT/UPDATE/DELETE/DDL) are read
+    SCNType           OracleSCNType         // OracleSCNTypeNumber uses StartSCN as-is, OracleSCNTypeTimestamp resolves StartTime; any other value (including "", the default) falls through to the DB's current SCN
+    ExtractionMode    OracleExtractionMode  // no default — required to be OracleExtractionModeHotlog or OracleExtractionModeArchive; any other value errors
+    PollingInterval   time.Duration         // no default; passed directly to time.NewTicker, which panics for values <= 0 — effectively required to be positive
+    StartSCN          uint64                // only consulted when SCNType == OracleSCNTypeNumber; used as-is
+    BatchSize         int                   // <= 0 means no FETCH FIRST clause is added (unbounded fetch); > 0 adds `FETCH FIRST <BatchSize> ROWS ONLY`
 }
+
+// OracleSCNType selects how OracleSourceCDCOptions.StartSCN is resolved.
+type OracleSCNType string
+
+const (
+    OracleSCNTypeNumber    OracleSCNType = "number"
+    OracleSCNTypeTimestamp OracleSCNType = "timestamp"
+)
+
+// OracleExtractionMode selects the LogMiner extraction strategy. Any value
+// other than the two below returns an "unsupported extraction mode" error —
+// there is no default.
+type OracleExtractionMode string
+
+const (
+    OracleExtractionModeHotlog  OracleExtractionMode = "HOTLOG"
+    OracleExtractionModeArchive OracleExtractionMode = "ARCHIVE"
+)
+
+// OracleOperation is a LogMiner V$LOGMNR_CONTENTS.OPERATION value, used to
+// filter OracleSourceCDCOptions.IncludeOperations.
+type OracleOperation string
+
+const (
+    OracleOperationInsert OracleOperation = "INSERT"
+    OracleOperationUpdate OracleOperation = "UPDATE"
+    OracleOperationDelete OracleOperation = "DELETE"
+    OracleOperationDDL    OracleOperation = "DDL"
+)
 ```
 
 These structures provide:
@@ -167,12 +196,16 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.
 
 func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error) {
     return &models.OracleSourceCDCOptions{
-        SourceTables:      []string{param.State.GetName()},
-        SCNType:           "CURRENT", // anything other than "number"/"timestamp" falls through to the DB's current SCN
-        ExtractionMode:    "HOTLOG",
-        IncludeOperations: []string{"INSERT", "UPDATE", "DELETE"},
-        BatchSize:         100, // <= 0 would mean unbounded fetch
-        PollingInterval:   5 * time.Second,
+        SourceTables:   []string{param.State.GetName()},
+        SCNType:        "CURRENT", // anything other than OracleSCNTypeNumber/OracleSCNTypeTimestamp falls through to the DB's current SCN
+        ExtractionMode: models.OracleExtractionModeHotlog,
+        IncludeOperations: []models.OracleOperation{
+            models.OracleOperationInsert,
+            models.OracleOperationUpdate,
+            models.OracleOperationDelete,
+        },
+        BatchSize:       100, // <= 0 would mean unbounded fetch
+        PollingInterval: 5 * time.Second,
         ParseFn: func(event models.OracleChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {

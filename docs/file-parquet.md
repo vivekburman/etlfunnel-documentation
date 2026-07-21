@@ -134,14 +134,42 @@ type ParquetDestQuery struct {
 }
 
 type ParquetDestOptions struct {
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    CompressionCodec  ParquetCompressionCodec // page compression codec applied to every column; "" (default) means uncompressed
+    MaxRecordsPerPart int                     // 0 = unlimited records per part
+    WriteMode         WriteMode               // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string                  // "" resolves to "part"
 }
 
 type ParquetDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
+
+// ParquetCompressionCodec selects the page compression codec applied to
+// every column of a Parquet destination. The zero value
+// (ParquetCompressionCodecNone) and "none" both mean uncompressed; matching
+// is case-insensitive. Resolved once for the whole run — parquet-go's
+// Writer takes one Compression WriterOption per writer instance, so this
+// can't vary per record.
+type ParquetCompressionCodec string
+
+const (
+    ParquetCompressionCodecNone   ParquetCompressionCodec = ""
+    ParquetCompressionCodecSnappy ParquetCompressionCodec = "snappy"
+    ParquetCompressionCodecGzip   ParquetCompressionCodec = "gzip"
+    ParquetCompressionCodecZstd   ParquetCompressionCodec = "zstd"
+    ParquetCompressionCodecLz4    ParquetCompressionCodec = "lz4"
+    ParquetCompressionCodecBrotli ParquetCompressionCodec = "brotli"
+)
 ```
 
 This structure manages:
@@ -149,16 +177,16 @@ This structure manages:
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
 - **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
 - **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically; `MaxRecordsPerPart: 0` means unlimited rows per part, and `FilePrefix: ""` resolves to `"part"`
-
-Note there is no `CompressionCodec` option — parts are always written uncompressed.
+- **CompressionCodec** - `ParquetCompressionCodecSnappy`/`Gzip`/`Zstd`/`Lz4`/`Brotli` (case-insensitive); `""` (default, `ParquetCompressionCodecNone`) or `"none"` means uncompressed
 
 ### Example Destination
 
 ```go
 func (c *IUseConnector) GenerateOptions(param *models.ParquetDestQuery) (*models.ParquetDestOptions, error) {
     return &models.ParquetDestOptions{
+        CompressionCodec:  models.ParquetCompressionCodecSnappy,
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }

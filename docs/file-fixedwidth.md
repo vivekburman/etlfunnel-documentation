@@ -156,15 +156,25 @@ type FixedWidthDestQuery struct {
 
 type FixedWidthDestOptions struct {
     Fields            []FixedWidthField
-    PadChar           string // defaults to ' ' (space) when empty
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    PadChar           string    // defaults to ' ' (space) when empty
+    MaxRecordsPerPart int       // 0 = unlimited records per part
+    WriteMode         WriteMode // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string    // "" resolves to "part"
 }
 
 type FixedWidthDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
 ```
 
 This structure manages:
@@ -186,7 +196,7 @@ func (c *IUseConnector) GenerateOptions(param *models.FixedWidthDestQuery) (*mod
         },
         PadChar:           " ",
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }

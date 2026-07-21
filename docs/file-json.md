@@ -40,7 +40,7 @@ type JSONSourceFetch struct {
 type JSONSourceScanOptions struct {
     Files          []string
     Lines          *bool  // defaults to false (nil) — whole-file JSON array mode rather than JSONL
-    RootPath       string // currently unused/dead — never read
+    RootPath       string // dot-separated key path to the row array within a non-array-root document; "" (default) means the document root itself is the row array
     RowLimit       int    // 0 = unlimited
     StartAfterPart int    // 0 = start from the first part
     StartAfterRow  int    // 0 = start from the first row
@@ -54,7 +54,7 @@ These structures provide:
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Files** - Part filenames (relative to the connector's configured directory) to read, in order
 - **Lines** - `true` for JSONL/NDJSON (one object per line), `false`/`nil` (the default) for a single top-level JSON array
-- **RootPath** - Currently unused/dead — declared but never read by the JSON source, despite the name suggesting a nested-object prefix
+- **RootPath** - Only consulted in whole-file JSON array mode (`Lines` false/nil; ignored in JSONL mode, since each line is already one row with no enclosing document to navigate). A dot-separated key path selecting the row array within a non-array-root document — e.g. `"meta.results"` reads the array at `doc["meta"]["results"]`. `""` (the default) means the document root itself is the row array. Each element the path resolves to must be a JSON object; a non-object element or a path segment that doesn't resolve to an array returns an error
 - **RowLimit / StartAfterPart / StartAfterRow** - Resume support: cap how many rows to deliver, and skip ahead to a specific part/row (e.g. after a checkpoint); `0` means unlimited / start from the very first part or row
 
 ### Record Position Metadata
@@ -76,6 +76,16 @@ func (c *IUseConnector) GenerateScan(param *models.JSONSourceScan) (*models.JSON
     return &models.JSONSourceScanOptions{
         Files: []string{"events_2024.jsonl"},
         Lines: &lines,
+    }, nil
+}
+
+// A whole-file JSON array nested under a wrapper object instead of at the
+// document root — e.g. `{"meta": {...}, "results": [...]}` — needs RootPath
+// to locate the row array (Lines left nil/false):
+func (c *IUseConnector) GenerateScanNested(param *models.JSONSourceScan) (*models.JSONSourceScanOptions, error) {
+    return &models.JSONSourceScanOptions{
+        Files:    []string{"orders_2024.json"},
+        RootPath: "results",
     }, nil
 }
 
@@ -118,7 +128,9 @@ type IClientDBJSONDest interface {
 This interface enables:
 
 - **Batch Processing** - Receives a batch of records and returns one write payload per record
-- **Options Generation** - A one-time hook, called before the pipeline starts writing, that controls output shape (`Lines`) and part-rotation behavior (`WriteMode`, `FilePrefix`, `MaxRecordsPerPart`)
+- **Options Generation** - A one-time hook, called before the pipeline starts writing, that controls part-rotation behavior (`WriteMode`, `FilePrefix`, `MaxRecordsPerPart`)
+
+Unlike the source, the destination always writes JSONL — one object per line, streamed as records arrive — so there is no `Lines` option here. A bare JSON array was considered but rejected: a JSON array is one value, so writing it means buffering the entire part in memory until rotation or `Close`, which is unbounded when `MaxRecordsPerPart` is `0`.
 
 ### Destination Configuration Structure
 
@@ -133,15 +145,24 @@ type JSONDestQuery struct {
 }
 
 type JSONDestOptions struct {
-    Lines             *bool  // nil/false is treated as falsy (whole-file JSON array mode) wherever checked
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    MaxRecordsPerPart int       // 0 = unlimited records per part
+    WriteMode         WriteMode // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string    // "" resolves to "part"
 }
 
 type JSONDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
 ```
 
 This structure manages:
@@ -154,11 +175,9 @@ This structure manages:
 
 ```go
 func (c *IUseConnector) GenerateOptions(param *models.JSONDestQuery) (*models.JSONDestOptions, error) {
-    lines := true
     return &models.JSONDestOptions{
-        Lines:             &lines,
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }

@@ -47,7 +47,7 @@ type KafkaSourceSubscriptionOptions struct {
     FetchMaxBytes     int32         // <= 0 leaves sarama's built-in default (unlimited, 0); only overridden when > 0
     SessionTimeout    time.Duration // <= 0 leaves sarama's built-in default (10s); only overridden when > 0
     HeartbeatInterval time.Duration // <= 0 leaves sarama's built-in default (3s); only overridden when > 0
-    CommitInterval    time.Duration // <= 0 leaves sarama's built-in default (1s); only overridden when > 0
+    RebalanceTimeout  time.Duration // <= 0 leaves sarama's built-in default (60s); only overridden when > 0. Also bounds (at 80%) how long a forced destination flush may run before a partition revocation completes
     ParseFn           func(KafkaRawMessage) (map[string]any, error)
 }
 
@@ -83,7 +83,13 @@ These structures provide:
 - **ParseFn** - Controls how raw Kafka message bytes become pipeline records; the engine never decides the record shape
 
 :::note Defaults on `KafkaSourceSubscriptionOptions`
-Leaving `MaxWaitTime`, `FetchMaxBytes`, `SessionTimeout`, `HeartbeatInterval`, or `CommitInterval` at `<= 0` (including the zero value) leaves sarama's own built-in default in place — respectively `250ms`, unlimited (`0`), `10s`, `3s`, and `1s`. `InitialOffset` has no such fallback: it's set unconditionally, so a literal `0` is used as-is rather than falling back to `sarama.OffsetNewest`. Auto-commit is always enabled internally — there is no field to configure it, since manual/checkpoint-gated commits aren't currently supported. `KafkaSourceAssignmentOptions` has no `MaxWaitTime`/`FetchMaxBytes` equivalents — manual partition assignment always reuses the existing client's configuration.
+Leaving `MaxWaitTime`, `FetchMaxBytes`, `SessionTimeout`, `HeartbeatInterval`, or `RebalanceTimeout` at `<= 0` (including the zero value) leaves sarama's own built-in default in place — respectively `250ms`, unlimited (`0`), `10s`, `3s`, and `60s`. `InitialOffset` has no such fallback: it's set unconditionally, so a literal `0` is used as-is rather than falling back to `sarama.OffsetNewest`. `KafkaSourceAssignmentOptions` has no `MaxWaitTime`/`FetchMaxBytes` equivalents — manual partition assignment always reuses the existing client's configuration.
+:::
+
+:::note Offsets commit only once the destination confirms durability
+Sarama's own auto-commit timer is disabled entirely — there is no `CommitInterval` to configure. Instead, offsets are marked and committed from the pipeline's commit hook, only after a batch has been confirmed durably written to the destination. Messages that never become a record (`ParseFn` nil or erroring) are marked immediately, since there's nothing durable to lose by skipping them and leaving them unmarked would stall the partition on a poison message forever.
+
+On a consumer-group rebalance, the source forces a synchronous flush of whatever the destination is still holding for the ending session before its partitions are revoked, so those offsets land while they're still valid to commit. That forced flush is bounded by `RebalanceTimeout` (at 80% of it, leaving headroom for the rest of the rebalance protocol): if nothing answers in time, the source logs a warning and lets the revocation proceed anyway, accepting a bounded duplicate-delivery window rather than risking this member getting kicked from the group.
 :::
 
 ### Example Source
@@ -98,7 +104,7 @@ func (c *IUseConnector) GenerateSubscription(param *models.KafkaSourceSubscribe)
         FetchMaxBytes:     1 * 1024 * 1024, // 1 MB
         SessionTimeout:    10 * time.Second,
         HeartbeatInterval: 3 * time.Second,
-        CommitInterval:    1 * time.Second,
+        RebalanceTimeout:  60 * time.Second,
         ParseFn: func(msg models.KafkaRawMessage) (map[string]any, error) {
             var payload map[string]any
             if err := json.Unmarshal(msg.Value, &payload); err != nil {

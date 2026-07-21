@@ -128,14 +128,40 @@ type AvroDestQuery struct {
 }
 
 type AvroDestOptions struct {
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    SchemaPath        string                // path to a .avsc file used verbatim as the schema for the whole run, instead of inferring one from the first row; "" (default) keeps the inference behavior
+    CompressionCodec  AvroCompressionCodec  // OCF block compression codec; "" (default) means uncompressed
+    MaxRecordsPerPart int                   // 0 = unlimited records per part
+    WriteMode         WriteMode             // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string                // "" resolves to "part"
 }
 
 type AvroDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
+
+// AvroCompressionCodec selects the OCF block compression codec applied by an
+// Avro destination. The zero value (AvroCompressionCodecNull) and "null"
+// both mean uncompressed; matching is case-insensitive. Resolved once per
+// run — hamba/avro's ocf.Encoder takes one codec per encoder, so this can't
+// vary per record.
+type AvroCompressionCodec string
+
+const (
+    AvroCompressionCodecNull      AvroCompressionCodec = ""
+    AvroCompressionCodecDeflate   AvroCompressionCodec = "deflate"
+    AvroCompressionCodecSnappy    AvroCompressionCodec = "snappy"
+    AvroCompressionCodecZStandard AvroCompressionCodec = "zstandard"
+)
 ```
 
 This structure manages:
@@ -143,15 +169,27 @@ This structure manages:
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
 - **Records Processing** - Handles a batch of `*models.Record` for transformation and loading; use `Record.Data` to access field values
 - **Part Rotation** - Once a part reaches `MaxRecordsPerPart` rows, the engine closes it and opens the next one automatically; `MaxRecordsPerPart: 0` means unlimited rows per part, and `FilePrefix: ""` resolves to `"part"`
-- **Schema** - There is no `SchemaPath` option; the engine auto-infers the Avro schema per row via `buildAvroSchema`. There is likewise no `CompressionCodec` option — parts are always written uncompressed
+- **Schema** - By default the engine auto-infers the Avro schema from the first row of the run via `buildAvroSchema`. Setting `SchemaPath` to a `.avsc` file path reads and validates that schema once and uses it verbatim for the entire run instead — mutually exclusive with inference, not layered on top of it; when set, inference never runs at all
+- **CompressionCodec** - `AvroCompressionCodecDeflate`/`Snappy`/`ZStandard` (case-insensitive); `""` (default, `AvroCompressionCodecNull`) or `"null"` means uncompressed
 
 ### Example Destination
 
 ```go
 func (c *IUseConnector) GenerateOptions(param *models.AvroDestQuery) (*models.AvroDestOptions, error) {
     return &models.AvroDestOptions{
+        CompressionCodec:  models.AvroCompressionCodecSnappy,
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
+        FilePrefix:        "export",
+    }, nil
+}
+
+// Using a fixed schema instead of per-run inference:
+func (c *IUseConnector) GenerateOptionsWithSchema(param *models.AvroDestQuery) (*models.AvroDestOptions, error) {
+    return &models.AvroDestOptions{
+        SchemaPath:        "schemas/orders.avsc",
+        MaxRecordsPerPart: 50000,
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }

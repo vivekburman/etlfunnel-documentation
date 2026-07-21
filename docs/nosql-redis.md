@@ -74,16 +74,19 @@ type RedisSourceKeysOptions struct {
     ScanCount       int // no app-level default; passed straight through as the SCAN COUNT hint — 0 lets the Redis server apply its own default COUNT
 }
 
+// When ConsumerGroup is set, messages are only XAck'd via the pipeline's
+// CommitHook, once the destination has confirmed a batch durably written —
+// never inline at delivery. Without a consumer group there is no
+// pending-entries list (PEL) and nothing to ack.
 type RedisSourceStreamsOptions struct {
     ConsumerGroup   string
     ConsumerName    string
     SpecificStartId string
     StartFrom       string // "$" means "only new entries"; any other value, including "" (the zero value), is treated as a historical read start ID
     StreamNames     []string
-    BatchSize       int  // no default; used as-is for XREAD COUNT
-    BlockTime       int  // no default; used as-is (milliseconds) for XREAD BLOCK — 0 means non-blocking (no BLOCK option sent)
-    ClaimMinIdle    int  // <= 0 skips the pending-message-claim step entirely; > 0 claims messages idle for at least this many milliseconds
-    AutoAck         bool // no default; false (the zero value) means XAck is never called automatically — messages must be acked by the caller
+    BatchSize       int // no default; used as-is for XREAD COUNT
+    BlockTime       int // no default; used as-is (milliseconds) for XREAD BLOCK — 0 means non-blocking (no BLOCK option sent)
+    ClaimMinIdle    int // <= 0 skips the pending-message-claim step entirely; > 0 claims messages idle for at least this many milliseconds
 }
 
 // RedisSourceKeySpacesOptions fields have no default logic — Database,
@@ -116,7 +119,7 @@ These structures provide:
 - **ScanCount** - `0` lets the Redis server apply its own default `SCAN COUNT`; there is no app-level substitute
 - **StartFrom** (streams) - `"$"` means "only new entries"; any other value, including `""`, is treated as a historical read start ID
 - **ClaimMinIdle** (streams) - `<= 0` skips claiming pending messages entirely; `> 0` claims messages idle for at least that many milliseconds
-- **AutoAck** (streams) - Defaults to `false`, meaning `XAck` is never called automatically — messages must be acked by the caller
+- **Acking** (streams) - There is no `AutoAck` flag. When `ConsumerGroup` is set, `XAck` fires automatically — grouped by stream, one call per stream covering the whole batch — once the destination confirms that batch durably written; without a consumer group there is no PEL and nothing to ack
 
 ### Example Source
 
@@ -146,7 +149,6 @@ func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*mode
         StartFrom:       ">",
         BatchSize:       50,
         BlockTime:       1000,
-        AutoAck:         false,
         ClaimMinIdle:    60000,
     }, nil
 }

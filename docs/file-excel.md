@@ -143,16 +143,26 @@ type ExcelDestQuery struct {
 
 type ExcelDestOptions struct {
     SheetName         string
-    SheetIndex        int    // 0-based, used when SheetName is empty; same "0 means unset" caveat as ExcelSourceScanOptions
-    HasHeader         *bool  // defaults to true when nil
-    MaxRecordsPerPart int    // 0 = unlimited records per part
-    WriteMode         string // "overwrite" clears existing parts first; anything else (including "") appends new parts
-    FilePrefix        string // "" resolves to "part"
+    SheetIndex        int       // 0-based, used when SheetName is empty; same "0 means unset" caveat as ExcelSourceScanOptions
+    HasHeader         *bool     // defaults to true when nil
+    MaxRecordsPerPart int       // 0 = unlimited records per part
+    WriteMode         WriteMode // WriteModeOverwrite clears existing parts first; anything else (including WriteModeAppend, the zero value "") appends new parts
+    FilePrefix        string    // "" resolves to "part"
 }
 
 type ExcelDestWritePayload struct {
     Rows []map[string]any
 }
+
+// WriteMode controls whether a file destination appends to or clears
+// existing part files before writing. The zero value (WriteModeAppend)
+// preserves existing parts.
+type WriteMode string
+
+const (
+    WriteModeAppend    WriteMode = ""
+    WriteModeOverwrite WriteMode = "overwrite"
+)
 ```
 
 This structure manages:
@@ -170,7 +180,7 @@ func (c *IUseConnector) GenerateOptions(param *models.ExcelDestQuery) (*models.E
         SheetName:         "Export",
         HasHeader:         &hasHeader,
         MaxRecordsPerPart: 50000,
-        WriteMode:         "overwrite",
+        WriteMode:         models.WriteModeOverwrite,
         FilePrefix:        "export",
     }, nil
 }
