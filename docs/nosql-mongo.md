@@ -76,6 +76,18 @@ These structures provide:
 - **BSON Command Documents** - Native MongoDB query format for flexible document operations
 - **Collection** - `MongoStreamsOptions` and `MongoSourceOplogOptions` each carry the target collection name alongside their filter/pipeline
 
+### Record Position Metadata
+
+`GenerateStream` and `GenerateOplogTrailing` reads each stamp their own resume position on the delivered record's `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_mongo_resume_token` | `models.MetaMongoResumeToken` | `GenerateStream` reads: the change stream's resume token, always set |
+| `_mongo_cluster_time` | `models.MetaMongoClusterTime` | `GenerateStream` reads: the change event's cluster time, when present |
+| `_mongo_oplog_ts` | `models.MetaMongoOplogTimestamp` | `GenerateOplogTrailing` reads: the oplog entry's own timestamp, when present |
+
+`GenerateQuery` reads never set `Meta` — a one-shot aggregation has no position to resume from.
+
 ### Example Source Implementation
 
 ```go

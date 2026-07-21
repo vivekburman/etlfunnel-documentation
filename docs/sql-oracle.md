@@ -145,6 +145,16 @@ const (
 | `RedoSQL` | Redo SQL for the change, when available. |
 | `UndoSQL` | Undo SQL for the change, when available. |
 
+### Record Position Metadata
+
+`GenerateCDC` (LogMiner) reads stamp each delivered record's `Meta` with the SCN that produced it:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_oracle_scn` | `models.MetaOracleSCN` | The SCN, as `uint64` (matching `OracleSourceCDCOptions.StartSCN`'s own type), that produced this change |
+
+`GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from. Reusing this value directly as `StartSCN` (with `SCNType: models.OracleSCNTypeNumber`) on a fresh `GenerateCDC` call resumes LogMiner from exactly this point.
+
 ### Example Source
 
 ```go

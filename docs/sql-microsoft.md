@@ -136,6 +136,21 @@ const (
 `MySQLChangeEvent`, `MariaChangeEvent`, `OracleChangeEvent`, and `PostgresChangeEvent` all expose their per-event extras as typed fields directly on the struct (e.g. `Query`/`XID`, `SCN`/`RedoSQL`, `RelationOID`) rather than a generic `map[string]any`. `MSSQLChangeEvent.Meta` is the one exception, because SQL Server's CDC `__$*` system columns are numerous and driver-specific rather than a small fixed set worth giving individual typed fields.
 :::
 
+### Record Position Metadata
+
+`GenerateCDC` and `GenerateServiceBroker` reads each stamp their own key on the delivered record's `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_mssql_lsn` | `models.MetaMSSQLLSN` | `GenerateCDC` reads: the LSN that produced this change, hex-encoded with a leading `0x` — the exact format `MicrosoftServerSourceCDCOptions.FromLSN` expects, reusable with zero conversion |
+| `_mssql_conversation_handle` | `models.MetaMSSQLConversationHandle` | `GenerateServiceBroker` reads: the conversation handle, needed to end the conversation after processing |
+
+`GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from.
+
+:::note This is a different `Meta` than `MSSQLChangeEvent.Meta` above
+The `MSSQLChangeEvent.Meta` field documented above is raw `__$*` system-column input handed to your `ParseFn`. `Record.Meta` (this section) is the engine's own output, attached to the record after your `ParseFn` has already run — the two only share a name, not a value.
+:::
+
 ### Example Source
 
 ```go

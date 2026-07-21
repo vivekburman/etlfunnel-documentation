@@ -124,6 +124,18 @@ const (
 | `Position` | Postgres LSN at the time of the change. |
 | `RelationOID` | Relation OID from the logical replication protocol. |
 
+### Record Position Metadata
+
+`GenerateNotification` and `GenerateWAL` reads each stamp their own key(s) on the delivered record's `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_pg_notify_channel` | `models.MetaPGNotifyChannel` | `GenerateNotification` reads: the channel name that matched |
+| `_pg_notify_pid` | `models.MetaPGNotifyPID` | `GenerateNotification` reads: the sending backend's PID |
+| `_pg_wal_lsn` | `models.MetaPGWALLSN` | `GenerateWAL` reads: the LSN that produced this change (both `PG_OUTPUT` and `WAL2JSON` output plugins) |
+
+`GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from.
+
 ### Example Source
 
 ```go

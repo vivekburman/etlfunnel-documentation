@@ -92,6 +92,17 @@ Sarama's own auto-commit timer is disabled entirely — there is no `CommitInter
 On a consumer-group rebalance, the source forces a synchronous flush of whatever the destination is still holding for the ending session before its partitions are revoked, so those offsets land while they're still valid to commit. That forced flush is bounded by `RebalanceTimeout` (at 80% of it, leaving headroom for the rest of the rebalance protocol): if nothing answers in time, the source logs a warning and lets the revocation proceed anyway, accepting a bounded duplicate-delivery window rather than risking this member getting kicked from the group.
 :::
 
+### Record Position Metadata
+
+Both `GenerateSubscription` and `GenerateAssignment` reads stamp each delivered record's `Meta` with the originating message's full identity — you don't need to copy these into `Data` yourself the way the example below does; that copy is for consumers that only ever look at `Data`, and is redundant with what's already on `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_kafka_key` | `models.MetaKafkaKey` | The message key |
+| `_kafka_topic` | `models.MetaKafkaTopic` | The originating topic |
+| `_kafka_partition` | `models.MetaKafkaPartition` | The originating partition |
+| `_kafka_offset` | `models.MetaKafkaOffset` | The message offset — this is what the pipeline's commit hook actually marks and commits; nothing else on the record is read for that purpose |
+
 ### Example Source
 
 ```go

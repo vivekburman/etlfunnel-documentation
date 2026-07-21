@@ -49,7 +49,9 @@ type MariaSourceQueryOptions struct {
 }
 
 type MariaSourceBinlogOptions struct {
-    ParseFn func(MariaChangeEvent) (map[string]any, error)
+    ParseFn       func(MariaChangeEvent) (map[string]any, error)
+    StartFile     string // binlog filename to start streaming from
+    StartPosition uint32 // byte offset within StartFile to start streaming from
 }
 ```
 
@@ -59,6 +61,7 @@ These structures provide:
 - **Source DB Connection** - Direct MariaDB connection instance for data extraction, available on `MariaSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
+- **StartFile / StartPosition** - Select where `GenerateBinLog` begins streaming; leaving both unset reproduces the server's own default, which is **not** "start from now" — an empty filename makes the server start from the first event of its *oldest retained* binlog
 
 The replication server ID is configured once, at the connection level — the **Server ID** parameter on the [MariaDB Connector](connector-hub.md#mariadb-connector) — and is what actually registers with the MariaDB master.
 
@@ -102,6 +105,17 @@ const (
 | `XID` | Transaction id, populated for `XIDEvent`-based changes. |
 | `GTID` | MariaDB global transaction id, populated for `MariadbGTIDEvent`-based changes. |
 | `Timestamp` | Binlog event header timestamp for row events. |
+
+### Record Position Metadata
+
+`GenerateBinLog` reads stamp each delivered record's `Meta` with the exact `(file, position)` coordinate that produced it — including `MariadbGTIDEvent`-based records, since file+position resume works regardless of whether GTID mode is also active:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_maria_binlog_file` | `models.MetaMariaBinlogFile` | The binlog filename currently being read, tracked from the server's own rotate events |
+| `_maria_binlog_pos` | `models.MetaMariaBinlogPos` | The byte position immediately after this event, within that file |
+
+Both values are directly reusable, with no conversion, as `StartFile`/`StartPosition` on a fresh `GenerateBinLog` call — resuming with them continues the stream right after the row that produced them, without replaying it.
 
 ### Example Source
 ```go

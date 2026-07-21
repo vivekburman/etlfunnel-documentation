@@ -121,6 +121,21 @@ These structures provide:
 - **ClaimMinIdle** (streams) - `<= 0` skips claiming pending messages entirely; `> 0` claims messages idle for at least that many milliseconds
 - **Acking** (streams) - There is no `AutoAck` flag. When `ConsumerGroup` is set, `XAck` fires automatically — grouped by stream, one call per stream covering the whole batch — once the destination confirms that batch durably written; without a consumer group there is no PEL and nothing to ack
 
+### Record Position Metadata
+
+Each Redis read mode stamps its own key(s) on the delivered record's `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_redis_key` | `models.MetaRedisKey` | `GenerateKeys` reads: the key that was read |
+| `_redis_data_type` | `models.MetaRedisDataType` | `GenerateKeys` reads: the key's Redis data type (`string`/`hash`/`list`/`set`/`zset`) |
+| `_redis_ttl` | `models.MetaRedisTTL` | `GenerateKeys` reads: the key's TTL at read time |
+| `_redis_channel` | `models.MetaRedisChannel` | `GenerateKeyspace` reads: the keyspace-notification channel that matched |
+| `_redis_stream_name` | `models.MetaRedisStreamName` | `GenerateStreams` reads: the stream name the entry came from |
+| `_redis_stream_message_id` | `models.MetaRedisMessageID` | `GenerateStreams` reads: the entry's own stream ID, needed to `XAck` it |
+
+`FetchRecords` (user-defined mode) sets no `Meta` of its own — whatever it puts on the record is entirely up to your implementation.
+
 ### Example Source
 
 ```go
