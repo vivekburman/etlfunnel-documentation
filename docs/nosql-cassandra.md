@@ -10,8 +10,8 @@ The Cassandra source interface supports two extraction approaches:
 
 ```go
 type IClientDBCassandraSource interface {
-    GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryTune, error)
-    FetchRecords(param *models.CassandraSourceFetch) <-chan map[string]any
+    GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryOptions, error)
+    FetchRecords(param *models.CassandraSourceFetch) <-chan *models.Record
 }
 ```
 
@@ -23,21 +23,18 @@ type IClientDBCassandraSource interface {
 ```go
 type CassandraSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *gocql.Session
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type CassandraSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *gocql.Session
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-// CassandraSourceQueryTune describes a CQL SELECT to execute against Cassandra.
+// CassandraSourceQueryOptions describes a CQL SELECT to execute against Cassandra.
 // PageState is the continuation token returned by a previous page; leave nil for the first page.
-type CassandraSourceQueryTune struct {
+type CassandraSourceQueryOptions struct {
     Parameters []any
     PageState  []byte
     CQL        string
@@ -48,20 +45,29 @@ type CassandraSourceQueryTune struct {
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source Connection** - GoCQL session instance for Cassandra queries
-- **Destination DB Connection** - Target database interface for processed data
+- **Source Connection** - GoCQL session instance for Cassandra queries, available on `CassandraSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **PageState** - Opaque continuation token for cursor-based pagination across large result sets
+
+### Record Position Metadata
+
+Query reads stamp each delivered record's `Meta` with the page state that fetched its page:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_cassandra_page_state` | `models.MetaCassandraPageState` | The `PageState` that fetched the record's current page |
+
+This is page-granularity, not row-granularity: gocql only hands back a page state per page fetched, so the value is deliberately lagged by one page boundary rather than using the iterator's own (already-advanced) next-page state. Resuming a checkpoint hook with this value re-fetches the whole page from the top — safe against duplicates, but it means a resume never skips a row that hadn't been delivered yet before a crash.
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryTune, error) {
+func (c *IUseConnector) GenerateCQLQuery(param *models.CassandraSourceQuery) (*models.CassandraSourceQueryOptions, error) {
     cql := fmt.Sprintf(
         "SELECT * FROM %s WHERE status = ? ALLOW FILTERING",
         param.State.GetName(),
     )
-    return &models.CassandraSourceQueryTune{
+    return &models.CassandraSourceQueryOptions{
         CQL:        cql,
         Parameters: []any{"active"},
         PageSize:   500,
@@ -69,8 +75,8 @@ func (c *IUseConnector) GenerateCQLQuery(param *models.CassandraSourceQuery) (*m
     }, nil
 }
 
-func (c *IUseConnector) FetchRecords(param *models.CassandraSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.CassandraSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -81,11 +87,11 @@ func (c *IUseConnector) FetchRecords(param *models.CassandraSourceFetch) <-chan 
 
         row := map[string]interface{}{}
         for iter.MapScan(row) {
-            record := make(map[string]any, len(row))
+            data := make(map[string]any, len(row))
             for k, v := range row {
-                record[k] = v
+                data[k] = v
             }
-            ch <- record
+            ch <- &models.Record{Data: data}
             row = map[string]interface{}{}
         }
 
@@ -106,7 +112,8 @@ The Cassandra destination interface provides structured write operations:
 
 ```go
 type IClientDBCassandraDest interface {
-    GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryTune, error)
+    GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryPayload, error)
+    GenerateOptions(param *models.CassandraDestQuery) (*models.CassandraDestOptions, error)
 }
 ```
 
@@ -114,7 +121,8 @@ This interface enables:
 
 - **Single CQL writes** - INSERT, UPDATE, DELETE with optional TTL and timestamp
 - **Batch writes** - LOGGED or UNLOGGED BATCH statements for atomic or high-throughput bulk operations
-- **Batch processing** - Receives a batch of records and returns one tune per record (or a BATCH tune for the whole set)
+- **Batch processing** - Receives a batch of records and returns one payload per record (or a BATCH payload for the whole set)
+- **Batching controls** - `GenerateOptions` returns `CassandraDestOptions`, capping how many same-partition payloads are folded into one physical CQL BATCH and how many partition groups execute concurrently
 
 ### Destination Configuration Structure
 
@@ -122,22 +130,26 @@ This interface enables:
 // Destination operations
 type CassandraDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *gocql.Session
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-// CassandraDestQueryTune describes a single CQL write statement.
+// CassandraDestQueryPayload describes a single CQL write statement.
 // For BATCH operations set Operation to CassandraDestOpBatch and populate BatchStatements.
-type CassandraDestQueryTune struct {
+type CassandraDestQueryPayload struct {
     Parameters      []any
-    BatchStatements []*CassandraDestQueryTune // populated when Operation == BATCH
+    BatchStatements []*CassandraDestQueryPayload // populated when Operation == BATCH
     CQL             string
     Operation       CassandraDestOperation
     TTL             int   // USING TTL <seconds>; 0 means no TTL
     Timestamp       int64 // USING TIMESTAMP <microseconds>; 0 means wall clock
     Logged          bool  // for BATCH: true = LOGGED (default), false = UNLOGGED
+    // PartitionKey is required when Operation != BATCH. Payloads sharing the
+    // same PartitionKey value are safe to fold into one physical CQL BATCH
+    // and are what the engine groups by when executing. Payloads with
+    // Operation == BATCH are already a fully-formed atomic unit via
+    // BatchStatements and don't need it.
+    PartitionKey any
 }
 
 type CassandraDestOperation string
@@ -148,20 +160,30 @@ const (
     CassandraDestOpDelete CassandraDestOperation = "DELETE"
     CassandraDestOpBatch  CassandraDestOperation = "BATCH"
 )
+
+// CassandraDestOptions is returned by GenerateOptions.
+type CassandraDestOptions struct {
+    // MaxBatchStatements caps how many payloads sharing a PartitionKey are
+    // folded into one physical CQL BATCH. Defaults to 32 when <= 0.
+    MaxBatchStatements int
+    // Concurrency caps how many distinct PartitionKey groups execute in
+    // parallel within one flush. Defaults to 1 (sequential) when <= 0.
+    Concurrency int
+}
 ```
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryTune, error) {
-    tunes := make([]*models.CassandraDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryPayload, error) {
+    payloads := make([]*models.CassandraDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, "?")
             args = append(args, v)
@@ -174,15 +196,23 @@ func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*mode
             strings.Join(placeholders, ", "),
         )
 
-        tunes = append(tunes, &models.CassandraDestQueryTune{
-            Operation:  models.CassandraDestOpInsert,
-            CQL:        cql,
-            Parameters: args,
-            TTL:        86400, // 24-hour TTL; set 0 to disable
+        payloads = append(payloads, &models.CassandraDestQueryPayload{
+            Operation:    models.CassandraDestOpInsert,
+            CQL:          cql,
+            Parameters:   args,
+            TTL:          86400, // 24-hour TTL; set 0 to disable
+            PartitionKey: rec.Data["id"],
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.CassandraDestQuery) (*models.CassandraDestOptions, error) {
+    return &models.CassandraDestOptions{
+        MaxBatchStatements: 32,
+        Concurrency:        4,
+    }, nil
 }
 ```
 
@@ -191,18 +221,18 @@ func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*mode
 Return a single `BATCH` tune to wrap all records in one atomic statement:
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryTune, error) {
-    stmts := make([]*models.CassandraDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*models.CassandraDestQueryPayload, error) {
+    stmts := make([]*models.CassandraDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        stmts = append(stmts, &models.CassandraDestQueryTune{
+        stmts = append(stmts, &models.CassandraDestQueryPayload{
             Operation:  models.CassandraDestOpInsert,
             CQL:        fmt.Sprintf("INSERT INTO %s (id, data) VALUES (?, ?)", param.State.GetName()),
-            Parameters: []any{rec["id"], rec["data"]},
+            Parameters: []any{rec.Data["id"], rec.Data["data"]},
         })
     }
 
-    return []*models.CassandraDestQueryTune{
+    return []*models.CassandraDestQueryPayload{
         {
             Operation:       models.CassandraDestOpBatch,
             BatchStatements: stmts,
@@ -215,13 +245,15 @@ func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*mode
 ## Connection Casting
 
 ```go
-// Cast IDatabaseEngine to Cassandra session
-cassandraSession, err := CastAsCassandraDBConnection(engine)
+// Cast IDatabaseConnInfo to Cassandra session
+cassandraConn, err := CastAsCassandraConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Cassandra connection: %v", err)
 }
 
-// cassandraSession is of type *gocql.Session
+// cassandraConn is of type models.DBConnector[*gocql.Session] — unwrap the
+// underlying session via .Client
+iter := cassandraConn.Client.Query("SELECT * FROM keyspace.table").Iter()
 ```
 
 :::tip Connection Casting

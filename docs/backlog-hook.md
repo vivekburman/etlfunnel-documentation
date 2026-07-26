@@ -1,10 +1,10 @@
 # Incident Backlog
 
-Backlog hooks are triggered when write operations to the destination fail, providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
+Backlog hooks are triggered when a record fails during the pipeline — either during transformation or during the destination write — providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
 
 ## Overview
 
-While checkpoint hooks handle successful commits, backlog hooks are invoked when data writes fail. This complementary mechanism allows you to:
+While checkpoint hooks handle successful commits, backlog hooks are invoked when a record fails, whether that failure happened during transformation (`FailureStageTransform`) or during the destination write (`FailureStageDestination`). This complementary mechanism allows you to:
 
 - Store failed records for later processing
 - Maintain data integrity during system outages
@@ -22,10 +22,8 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error)
 ```go
 type BacklogProps struct {
 	State              models.IPipelineRuntimeState
-	SourceDBConn       models.IDatabaseEngine
-	DestDBConn         models.IDatabaseEngine
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
-	Records            []map[string]any
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
+	Records            []*models.Record
 	FailureStage       models.FailureStage
 	Err                error
 }
@@ -57,6 +55,11 @@ const (
 	FailureStageDestination
 )
 
+type Record struct {
+	Data map[string]any // User-facing data that goes through transformations
+	Meta map[string]any // Internal metadata preserved throughout pipeline
+}
+
 type IPipelineRuntimeState interface {
 	GetName() string
 	GetFlowName() string
@@ -76,14 +79,14 @@ type IPipelineRuntimeState interface {
 ```go
 import (
 	"encoding/json"
+	castmysql "etlfunnel/execution/cast/mysql"
 	"etlfunnel/execution/models"
-	"etlfunnel/database/cast"
 	"fmt"
 	"time"
 )
 
 func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
-	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
+	mysqlConn, err := castmysql.CastAsMySQLConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
 		return nil, err
 	}
@@ -95,10 +98,10 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
 	`
 
 	for _, record := range param.Records {
-		recordJSON, _ := json.Marshal(record)
-		recordID := fmt.Sprintf("%v", record["id"])
+		recordJSON, _ := json.Marshal(record.Data)
+		recordID := fmt.Sprintf("%v", record.Data["id"])
 
-		_, err := mysqlConn.Exec(query,
+		_, err := mysqlConn.Client.Exec(query,
 			param.State.GetName(),
 			recordID,
 			string(recordJSON),

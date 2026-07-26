@@ -12,8 +12,8 @@ The Elasticsearch source interface supports two primary extraction approaches th
 
 ```go
 type IClientDBElasticSource interface {
-    FetchRecords(param *models.ElasticSourceFetch) <-chan map[string]any
-    GenerateQuery(request *models.ElasticSourceQuery) (*models.ElasticQueryTune, error)
+    FetchRecords(param *models.ElasticSourceFetch) <-chan *models.Record
+    GenerateQuery(request *models.ElasticSourceQuery) (*models.ElasticQueryOptions, error)
 }
 ```
 
@@ -29,47 +29,44 @@ When configuring Elasticsearch as a source database, the system uses these struc
 type ElasticSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *elasticsearch.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ElasticSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *elasticsearch.Client
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type ElasticQueryTune struct {
+type ElasticQueryOptions struct {
     Body          any
-    QueryType     DBElasticsearchQueryType
+    QueryType     ElasticQueryType
     Index         string
     DocumentID    string
-    ScrollTimeout time.Duration
+    ScrollTimeout time.Duration // no default; passed directly as Scroll: ScrollTimeout — the zero value sends no scroll duration to the ES client
 }
 
 const (
-    ElasticsearchQueryTypeSearch   DBElasticsearchQueryType = "SEARCH"
-    ElasticsearchQueryTypeScroll   DBElasticsearchQueryType = "SCROLL"
-    ElasticsearchQueryTypeGet      DBElasticsearchQueryType = "GET"
-    ElasticsearchQueryTypeMultiGet DBElasticsearchQueryType = "MGET"
-    ElasticsearchQueryTypeSQL      DBElasticsearchQueryType = "SQL"
+    ElasticQueryTypeSearch   ElasticQueryType = "SEARCH"
+    ElasticQueryTypeScroll   ElasticQueryType = "SCROLL"
+    ElasticQueryTypeGet      ElasticQueryType = "GET"
+    ElasticQueryTypeMultiGet ElasticQueryType = "MGET"
+    ElasticQueryTypeSQL      ElasticQueryType = "SQL"
 )
 ```
 
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct Elasticsearch client connection for data extraction  
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct Elasticsearch client connection for data extraction, available on `ElasticSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **Query Types** - Support for various Elasticsearch operations including search, scroll, get, multi-get, and SQL
+- **ScrollTimeout** - Left at its zero value, no scroll duration is sent to the client at all — there is no substituted default
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -101,7 +98,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan ma
         for _, hit := range hits {
             hitMap := hit.(map[string]interface{})
             source := hitMap["_source"].(map[string]interface{})
-            ch <- source
+            ch <- &models.Record{Data: source}
         }
 
         scrollID := searchResponse["_scroll_id"].(string)
@@ -126,7 +123,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan ma
             for _, hit := range scrollHits {
                 hitMap := hit.(map[string]interface{})
                 source := hitMap["_source"].(map[string]interface{})
-                ch <- source
+                ch <- &models.Record{Data: source}
             }
 
             scrollID = scrollResponse["_scroll_id"].(string)
@@ -136,7 +133,7 @@ func (c *IUseConnector) FetchRecords(param *models.ElasticSourceFetch) <-chan ma
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models.ElasticQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models.ElasticQueryOptions, error) {
     query := map[string]interface{}{
         "query": map[string]interface{}{
             "match_all": map[string]interface{}{},
@@ -144,8 +141,8 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models
         "size": 10,
     }
 
-    return &models.ElasticQueryTune{
-        QueryType:     models.ElasticsearchQueryTypeSearch,
+    return &models.ElasticQueryOptions{
+        QueryType:     models.ElasticQueryTypeSearch,
         Index:         param.State.GetName(),
         Body:          query,
         ScrollTimeout: time.Minute,
@@ -163,15 +160,17 @@ The Elasticsearch destination interface provides structured data loading operati
 
 ```go
 type IClientDBElasticDest interface {
-    GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error)
+    GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryPayload, error)
+    GenerateOptions(param *models.ElasticDestQuery) (*models.ElasticDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Document Indexing** - Optimized CREATE, INDEX, and UPDATE operations
-- **Bulk Processing** - Receives a batch of records and returns one query tune per record
+- **Bulk Processing** - Receives a batch of records and returns one query payload per record
 - **Upsert Operations** - Combined insert and update functionality
+- **Refresh Policy Configuration** - `GenerateOptions` returns an `ElasticDestOptions` value that sets the refresh policy for the whole bulk request
 
 ### Destination Configuration Structure
 
@@ -181,55 +180,58 @@ When using Elasticsearch as a destination, the system uses these struct definiti
 // Destination operations
 type ElasticDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *elasticsearch.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type ElasticDestQueryTune struct {
-    Document      map[string]any
-    Upsert        map[string]any
-    ScriptParams  map[string]any
-    Index         string
-    DocID         string
-    Operation     DBElasticWriteOperationType
-    RefreshPolicy string
-    Script        string
+type ElasticDestQueryPayload struct {
+    Document     map[string]any
+    Upsert       map[string]any
+    ScriptParams map[string]any
+    Index        string
+    DocID        string
+    Operation    ElasticWriteOperationType
+    Script       string
 }
 
 const (
-    ElasticWriteIndex  DBElasticWriteOperationType = "INDEX"
-    ElasticWriteCreate DBElasticWriteOperationType = "CREATE"
-    ElasticWriteUpdate DBElasticWriteOperationType = "UPDATE"
-    ElasticWriteDelete DBElasticWriteOperationType = "DELETE"
+    ElasticWriteIndex  ElasticWriteOperationType = "INDEX"
+    ElasticWriteCreate ElasticWriteOperationType = "CREATE"
+    ElasticWriteUpdate ElasticWriteOperationType = "UPDATE"
+    ElasticWriteDelete ElasticWriteOperationType = "DELETE"
 )
+
+// ElasticDestOptions is returned by GenerateOptions and applies to the whole
+// Bulk() request rather than a single payload.
+type ElasticDestOptions struct {
+    RefreshPolicy string // only overwritten when non-empty; "" (the zero value) is passed to Bulk.WithRefresh(""), which Elasticsearch treats as no-refresh — not an app-set default
+}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups; the destination Elasticsearch connection itself is managed internally and is not passed through this struct
 - **Operation Types** - Supports various Elasticsearch write operations
-- **Refresh Policies** - Controls when documents become searchable
+- **Refresh Policies** - Controlled via `ElasticDestOptions.RefreshPolicy` from `GenerateOptions`, applied to the whole bulk request; `""` (the zero value) is treated by Elasticsearch as no-refresh, not an app-substituted default
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryTune, error) {
-    tunes := make([]*models.ElasticDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models.ElasticDestQueryPayload, error) {
+    payloads := make([]*models.ElasticDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
         docID := ""
-        if id, exists := rec["id"]; exists {
+        if id, exists := rec.Data["id"]; exists {
             docID = fmt.Sprintf("%v", id)
         } else {
             docID = fmt.Sprintf("%d", time.Now().UnixNano())
         }
 
         document := make(map[string]any)
-        for k, v := range rec {
+        for k, v := range rec.Data {
             document[k] = v
         }
 
@@ -237,24 +239,29 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticDestQuery) ([]*models
             document["@timestamp"] = time.Now().UTC().Format(time.RFC3339)
         }
 
-        tunes = append(tunes, &models.ElasticDestQueryTune{
-            Index:         param.State.GetName(),
-            DocID:         docID,
-            Operation:     models.ElasticWriteIndex,
-            Document:      document,
-            RefreshPolicy: "false",
+        payloads = append(payloads, &models.ElasticDestQueryPayload{
+            Index:     param.State.GetName(),
+            DocID:     docID,
+            Operation: models.ElasticWriteIndex,
+            Document:  document,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.ElasticDestQuery) (*models.ElasticDestOptions, error) {
+    return &models.ElasticDestOptions{
+        RefreshPolicy: "false",
+    }, nil
 }
 ```
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -267,15 +274,15 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to Elasticsearch connection
+// Cast IDatabaseConnInfo to Elasticsearch connection
 elasticConn, err := CastAsElasticsearchConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Elasticsearch connection: %v", err)
 }
 
-// Now you can use the underlying Elasticsearch client directly
-// elasticConn is of type *elasticsearch.Client
-info, err := elasticConn.Info()
+// elasticConn is of type models.DBConnector[*elasticsearch.Client] — unwrap
+// the underlying client via .Client
+info, err := elasticConn.Client.Info()
 if err != nil {
     return fmt.Errorf("failed to get cluster info: %v", err)
 }
@@ -283,8 +290,7 @@ if err != nil {
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid Elasticsearch connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IElasticsearchConnector` capability interface (`GetElasticsearchClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

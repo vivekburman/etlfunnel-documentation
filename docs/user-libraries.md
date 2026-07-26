@@ -123,13 +123,48 @@ func (c *APIClient) POST(endpoint string, payload interface{}) (*http.Response, 
 }
 ```
 
+### Example: Auxiliary Connection Helper
+
+Transformers, checkpoints, backlogs, connectors, and fixtures all receive an `AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo` — a read-only view of each configured auxiliary connection, keyed by the name you gave it. A user library is the natural place to centralize the cast-and-lookup logic so every hook doesn't repeat it:
+
+```go
+package client_userlibrary
+
+import (
+    castpostgres "etlfunnel/execution/cast/postgres"
+    "etlfunnel/execution/models"
+    "fmt"
+
+    "github.com/jackc/pgx/v5"
+)
+
+const AuxDBKey = "Aux DB"
+
+// GetAuxPostgresConn retrieves and casts the auxiliary PostgreSQL connection from the map.
+func GetAuxPostgresConn(connMap map[string]models.IDatabaseConnInfo) (*pgx.Conn, error) {
+    engine, ok := connMap[AuxDBKey]
+    if !ok {
+        return nil, fmt.Errorf("auxiliary connection %q not found", AuxDBKey)
+    }
+    conn, err := castpostgres.CastAsPostgresConnection(engine)
+    if err != nil {
+        return nil, fmt.Errorf("failed to cast AuxDB connection: %w", err)
+    }
+    // CastAsPostgresConnection returns models.DBConnector[*pgx.Conn]; unwrap
+    // via .Client to keep this helper's return type a bare *pgx.Conn
+    return conn.Client, nil
+}
+```
+
+Any hook or connector can then call `client_userlibrary.GetAuxPostgresConn(param.AuxiliaryDBConnMap)` instead of repeating the cast-and-lookup inline. `IDatabaseConnInfo` only exposes `GetName()` and `IsConnectionError(err error) bool` — it deliberately has no `Connect`/`Close`, since connection lifecycle is owned exclusively by the system, never by client-authored code.
+
 ## Using Libraries in Pipelines
 
 Once created, your User Libraries can be imported and used in any pipeline:
 
 ```go
 // Import your user library
-import "your-workspace/client_userlibrary"
+import "etlfunnel/execution/client/userlibraries"
 
 // Use utility functions
 validator := &client_userlibrary.DataValidator{}

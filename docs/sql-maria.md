@@ -12,9 +12,9 @@ The MariaDB source interface supports three primary extraction approaches throug
 
 ```go
 type IClientDBMariaSource interface {
-    FetchRecords(param *models.MariaSourceFetch) <-chan map[string]any
-    GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error)
-    GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error)
+    FetchRecords(param *models.MariaSourceFetch) <-chan *models.Record
+    GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryOptions, error)
+    GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogOptions, error)
 }
 ```
 
@@ -31,55 +31,56 @@ When configuring MariaDB as a source database, the system uses these struct defi
 type MariaSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *client.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *client.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaSourceBinlog struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *client.Conn
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type MariaSourceQueryTune struct {
+type MariaSourceQueryOptions struct {
     Query string
 }
 
-type MariaSourceBinlogTune struct {
-    ParseFn  func(ChangeEvent) (map[string]any, error)
-    ServerID uint32
+type MariaSourceBinlogOptions struct {
+    ParseFn       func(MariaChangeEvent) (map[string]any, error)
+    StartFile     string // binlog filename to start streaming from
+    StartPosition uint32 // byte offset within StartFile to start streaming from
 }
 ```
 
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct MariaDB connection instance for data extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct MariaDB connection instance for data extraction, available on `MariaSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BinLog ParseFn** - Controls how raw change events are shaped into pipeline records
+- **StartFile / StartPosition** - Select where `GenerateBinLog` begins streaming; leaving both unset reproduces the server's own default, which is **not** "start from now" — an empty filename makes the server start from the first event of its *oldest retained* binlog
 
-### ChangeEvent
+The replication server ID is configured once, at the connection level — the **Server ID** parameter on the [MariaDB Connector](connector-hub.md#mariadb-connector) — and is what actually registers with the MariaDB master.
 
-`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+### MariaChangeEvent
+
+`MariaChangeEvent` is the typed value the engine passes to the `ParseFn` of `MariaSourceBinlogOptions`. All fields are populated by the engine before your function is called.
 
 ```go
-type ChangeEvent struct {
+type MariaChangeEvent struct {
     Before    map[string]any
     After     map[string]any
-    Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
-    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+    Position  string // LSN / GTID / SCN represented as string
+    Query     string // DDL/QueryEvent text
+    XID       string // transaction id (XIDEvent)
+    GTID      string // global transaction id (MariadbGTIDEvent)
+    Timestamp uint32 // binlog event header timestamp (row events)
 }
 
 type ChangeEventOperation string
@@ -99,13 +100,27 @@ const (
 | `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
 | `Database` | Source database name. |
 | `Table` | Source table name. |
-| `Position` | Replication position — LSN, GTID, or SCN depending on the database. |
-| `Meta` | Source-specific extras (e.g. Postgres relation OID, Oracle redo SQL). |
+| `Position` | Replication position (GTID/log position) at the time of the change. |
+| `Query` | Raw DDL/query text, populated for `QueryEvent`-based changes. |
+| `XID` | Transaction id, populated for `XIDEvent`-based changes. |
+| `GTID` | MariaDB global transaction id, populated for `MariadbGTIDEvent`-based changes. |
+| `Timestamp` | Binlog event header timestamp for row events. |
+
+### Record Position Metadata
+
+`GenerateBinLog` reads stamp each delivered record's `Meta` with the exact `(file, position)` coordinate that produced it — including `MariadbGTIDEvent`-based records, since file+position resume works regardless of whether GTID mode is also active:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_maria_binlog_file` | `models.MetaMariaBinlogFile` | The binlog filename currently being read, tracked from the server's own rotate events |
+| `_maria_binlog_pos` | `models.MetaMariaBinlogPos` | The byte position immediately after this event, within that file |
+
+Both values are directly reusable, with no conversion, as `StartFile`/`StartPosition` on a fresh `GenerateBinLog` call — resuming with them continues the stream right after the row that produced them, without replaying it.
 
 ### Example Source
 ```go
-func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -122,22 +137,21 @@ func (c *IUseConnector) FetchRecords(param *models.MariaSourceFetch) <-chan map[
                 val, _ := rows.GetValue(i, j)
                 record[string(col.Name)] = val
             }
-            ch <- record
+            ch <- &models.Record{Data: record}
         }
     }()
 
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MariaSourceQuery) (*models.MariaSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s LIMIT 10", param.State.GetName())
-    return &models.MariaSourceQueryTune{Query: query}, nil
+    return &models.MariaSourceQueryOptions{Query: query}, nil
 }
 
-func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogTune, error) {
-    return &models.MariaSourceBinlogTune{
-        ServerID: 1234, // unique replication client ID
-        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+func (c *IUseConnector) GenerateBinLog(param *models.MariaSourceBinlog) (*models.MariaSourceBinlogOptions, error) {
+    return &models.MariaSourceBinlogOptions{
+        ParseFn: func(event models.MariaChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
                 record = event.Before
@@ -160,14 +174,16 @@ The MariaDB destination interface provides structured data loading operations:
 
 ```go
 type IClientDBMariaDest interface {
-    GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error)
+    GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryPayload, error)
+    GenerateOptions(param *models.MariaDestQuery) (*models.MariaDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and UPSERT operations
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Options Generation** - Hook for destination-wide options (currently `MariaDestOptions` carries no fields)
 
 ### Destination Configuration Structure
 
@@ -177,36 +193,36 @@ When using MariaDB as a destination, the system uses this struct definition:
 // Destination operations
 type MariaDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *client.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type MariaDestQueryTune struct {
+type MariaDestQueryPayload struct {
     Query string
     Value []any
 }
+
+type MariaDestOptions struct{}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each wrapping a `Data` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryTune, error) {
-    tunes := make([]*models.MariaDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.MariaDestQueryPayload, error) {
+    payloads := make([]*models.MariaDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, "?")
             args = append(args, v)
@@ -218,21 +234,21 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.M
             strings.Join(placeholders, ", "),
         )
 
-        tunes = append(tunes, &models.MariaDestQueryTune{
+        payloads = append(payloads, &models.MariaDestQueryPayload{
             Query: query,
             Value: args,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
 }
 ```
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -245,20 +261,20 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to MariaDB connection
-mariaConn, err := CastAsMariaDBConnection(engine)
+// Cast IDatabaseConnInfo to MariaDB connection
+mariaConn, err := CastAsMariaConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MariaDB connection: %v", err)
 }
 
-// Now you can use the underlying MariaDB connection directly
-// mariaConn is of type *client.Conn
+// mariaConn is of type models.DBConnector[*client.Conn] — unwrap the driver
+// client via .Client
+result, err := mariaConn.Client.Execute("SELECT 1")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid MariaDB connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMariaConnector` capability interface (`GetMariaClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

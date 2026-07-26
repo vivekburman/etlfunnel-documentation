@@ -34,9 +34,9 @@ func Teardown(param *models.FixtureProps) error
 
 ```go
 type FixtureProps struct {
-	SourceDBConn       models.IDatabaseEngine
-	DestDBConn         models.IDatabaseEngine
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
+	SourceDBConn       models.IDatabaseConnInfo
+	DestDBConn         models.IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
 }
 ```
 
@@ -47,13 +47,13 @@ Return `nil` to allow the flow to proceed. Return a non-nil `error` to halt exec
 ### Referenced Types
 
 ```go
-type IDatabaseEngine interface {
+type IDatabaseConnInfo interface {
 	GetName() string
-	Connect(ctx context.Context, connectionConfig IConnectionConfig) error
 	IsConnectionError(err error) bool
-	Close(ctx context.Context) error
 }
 ```
+
+`IDatabaseConnInfo` is the read-only view of a database connection handed to client-authored code. It exposes identity and error-classification only — connection lifecycle (`Connect`/`Close`) is owned exclusively by the system and is never exposed to fixtures or any other client-facing code.
 
 ## Implementation Example
 
@@ -62,12 +62,13 @@ type IDatabaseEngine interface {
 ```go
 import (
 	"context"
+	castpostgres "etlfunnel/execution/cast/postgres"
 	"etlfunnel/execution/models"
 	"fmt"
 )
 
 func Setup(param *models.FixtureProps) error {
-	conn, err := cast.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture setup: connect auxdb: %w", err)
 	}
@@ -89,7 +90,7 @@ func Setup(param *models.FixtureProps) error {
 	}
 
 	for _, stmt := range stmts {
-		if _, err := conn.Exec(context.Background(), stmt); err != nil {
+		if _, err := conn.Client.Exec(context.Background(), stmt); err != nil {
 			return fmt.Errorf("fixture setup: ddl exec: %w", err)
 		}
 	}
@@ -103,17 +104,18 @@ func Setup(param *models.FixtureProps) error {
 ```go
 import (
 	"context"
+	castpostgres "etlfunnel/execution/cast/postgres"
 	"etlfunnel/execution/models"
 	"fmt"
 )
 
 func Teardown(param *models.FixtureProps) error {
-	conn, err := cast.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture teardown: connect auxdb: %w", err)
 	}
 
-	_, err = conn.Exec(context.Background(), `DELETE FROM ingestion_cursors WHERE updated_at < NOW() - INTERVAL '7 days'`)
+	_, err = conn.Client.Exec(context.Background(), `DELETE FROM ingestion_cursors WHERE updated_at < NOW() - INTERVAL '7 days'`)
 	if err != nil {
 		return fmt.Errorf("fixture teardown: cleanup: %w", err)
 	}

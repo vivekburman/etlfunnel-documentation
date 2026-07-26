@@ -39,9 +39,9 @@ Flow and pipeline orchestration use separate types. Each item exposes the databa
 // Flow-level types
 type FlowOrchestratorItemProps struct {
 	Name               string
-	SourceDBConn       IDatabaseEngine
-	DestDBConn         IDatabaseEngine
-	AuxiliaryDBConnMap map[string]IDatabaseEngine
+	SourceDBConn       IDatabaseConnInfo
+	DestDBConn         IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type FlowOrchestratorProps struct {
@@ -58,9 +58,9 @@ type FlowOrchestratorTune struct {
 type PipelineOrchestratorItemProps struct {
 	Name               string
 	EntityBaseName     string
-	SourceDBConn       IDatabaseEngine
-	DestDBConn         IDatabaseEngine
-	AuxiliaryDBConnMap map[string]IDatabaseEngine
+	SourceDBConn       IDatabaseConnInfo
+	DestDBConn         IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PipelineOrchestratorProps struct {
@@ -85,7 +85,7 @@ import (
     "runtime"
 )
 
-func GetFlowOrchestration(param *models.FlowOrchestratorProps) ([]models.FlowOrchestratorTune, error) {
+func FlowOrchestrator(param *models.FlowOrchestratorProps) ([]models.FlowOrchestratorTune, error) {
     numThreads := runtime.NumCPU()
 
     var replicas []models.FlowOrchestratorTune
@@ -120,7 +120,7 @@ import (
     "fmt"
 )
 
-func GetPipelineOrchestration(param *models.PipelineOrchestratorProps) ([]models.PipelineOrchestratorTune, error) {
+func PipelineOrchestrator(param *models.PipelineOrchestratorProps) ([]models.PipelineOrchestratorTune, error) {
     var replicas []models.PipelineOrchestratorTune
 
     for _, pipeline := range param.Pipelines {

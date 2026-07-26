@@ -9,13 +9,13 @@ const sidebars: SidebarsConfig = {
             items: ['intro', 'architecture', 'setup-guide'],
         },
         {
-            collapsed: false,
+            collapsed: true,
             type: 'category',
             label: 'Builder',
             items: ['connector-hub', 'resource-flow', 'resource-collection'],
         },
         {
-            collapsed: false,
+            collapsed: true,
             type: 'category',
             label: 'Data Plane',
             items: [
@@ -25,7 +25,7 @@ const sidebars: SidebarsConfig = {
             ],
         },
         {
-            collapsed: false,
+            collapsed: true,
             type: 'category',
             label: 'Control Plane',
             items: [
@@ -38,7 +38,7 @@ const sidebars: SidebarsConfig = {
             ],
         },
         {
-            collapsed: false,
+            collapsed: true,
             type: 'category',
             label: 'Executions',
             items: ['creating-a-new-build', 'integration-webhook'],
@@ -49,7 +49,7 @@ const sidebars: SidebarsConfig = {
             label: 'Code Reference',
             items: [
                 {
-                    collapsed: false,
+                    collapsed: true,
                     type: 'category',
                     label: 'Relational DB',
                     items: [
@@ -61,7 +61,7 @@ const sidebars: SidebarsConfig = {
                     ],
                 },
                 {
-                    collapsed: false,
+                    collapsed: true,
                     type: 'category',
                     label: 'Non-Relational DB',
                     items: [
@@ -73,15 +73,34 @@ const sidebars: SidebarsConfig = {
                     ],
                 },
                 {
-                    collapsed: false,
+                    collapsed: true,
                     type: 'category',
                     label: 'APIs',
                     items: [
                         'restapi',
                     ],
                 },
+                {
+                    collapsed: true,
+                    type: 'category',
+                    label: 'File-Based',
+                    items: [
+                        'file-csv',
+                        'file-json',
+                        'file-excel',
+                        'file-parquet',
+                        'file-avro',
+                        'file-fixedwidth',
+                    ],
+                },
             ],
         },
+        {
+            collapsed: true,
+            type: 'category',
+            label: 'Observability',
+            items: ['ef-codes'],
+        }
     ],
 };
 

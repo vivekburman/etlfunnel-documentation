@@ -23,10 +23,8 @@ func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error)
 ```go
 type CheckpointProps struct {
 	State              models.IPipelineRuntimeState
-	SourceDBConn       models.IDatabaseEngine
-	DestDBConn         models.IDatabaseEngine
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
-	Records            []map[string]any
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
+	Records            []*models.Record
 }
 ```
 
@@ -47,6 +45,11 @@ const (
 	ActionContinue PipelineAction = iota
 	ActionStop
 )
+
+type Record struct {
+	Data map[string]any // User-facing data that goes through transformations
+	Meta map[string]any // Internal metadata preserved throughout pipeline
+}
 
 type IPipelineRuntimeState interface {
 	GetName() string
@@ -69,13 +72,14 @@ type IPipelineRuntimeState interface {
 ```go
 import (
 	"encoding/json"
+	castmysql "etlfunnel/execution/cast/mysql"
 	"etlfunnel/execution/models"
 	"fmt"
 	"time"
 )
 
 func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error) {
-	mysqlConn, err := cast.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
+	mysqlConn, err := castmysql.CastAsMySQLConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +91,10 @@ func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error) {
 	`
 
 	for _, record := range param.Records {
-		recordJSON, _ := json.Marshal(record)
-		recordID := fmt.Sprintf("%v", record["id"])
+		recordJSON, _ := json.Marshal(record.Data)
+		recordID := fmt.Sprintf("%v", record.Data["id"])
 
-		_, err := mysqlConn.Exec(query,
+		_, err := mysqlConn.Client.Exec(query,
 			param.State.GetName(),
 			recordID,
 			time.Now().UTC(),

@@ -12,9 +12,9 @@ The Oracle source interface supports three primary extraction approaches through
 
 ```go
 type IClientDBOracleSource interface {
-    FetchRecords(param *models.OracleSourceFetch) <-chan map[string]any
-    GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error)
-    GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error)
+    FetchRecords(param *models.OracleSourceFetch) <-chan *models.Record
+    GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryOptions, error)
+    GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error)
 }
 ```
 
@@ -31,72 +31,95 @@ When configuring Oracle as a source database, the system uses these struct defin
 type OracleSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *sql.DB
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *sql.DB
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleSourceCDC struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *sql.DB
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type OracleSourceQueryTune struct {
-    Query           string
-    RecordsPerBatch int
-    PrefetchSize    int
+type OracleSourceQueryOptions struct {
+    Query           string // no default — required
+    RecordsPerBatch int    // no default; passed straight to godror.PrefetchCount(RecordsPerBatch). 0 (or negative) disables batching
+    PrefetchSize    int    // no default; passed straight to godror.FetchArraySize(PrefetchSize)
 }
 
-type OracleSourceCDCTune struct {
-    ParseFn                func(ChangeEvent) (map[string]any, error)
-    StartTime              time.Time
-    SourceTables           []string
-    IncludeOperations      []string
-    SCNType                string
-    SessionRefreshMode     string
-    ExtractionMode         string
-    PollingInterval        time.Duration
-    SessionRefreshInterval time.Duration
-    RetryJitter            float64
-    StartSCN               uint64
-    BatchSize              int
-    SessionRefreshCount    int
-    MaxRetries             int
-    BaseRetryDelayMs       int
-    MaxRetryDelayMs        int
+type OracleSourceCDCOptions struct {
+    ParseFn           func(OracleChangeEvent) (map[string]any, error) // required; the source errors if nil
+    StartTime         time.Time             // only consulted when SCNType == OracleSCNTypeTimestamp; converted to an SCN. Zero value converts whatever SCN the DB maps epoch to
+    SourceTables      []string              // empty/nil means no table filter — all tables are read
+    IncludeOperations []OracleOperation     // empty/nil means no operation filter — all operations (INSERT/UPDATE/DELETE/DDL) are read
+    SCNType           OracleSCNType         // OracleSCNTypeNumber uses StartSCN as-is, OracleSCNTypeTimestamp resolves StartTime; any other value (including "", the default) falls through to the DB's current SCN
+    ExtractionMode    OracleExtractionMode  // no default — required to be OracleExtractionModeHotlog or OracleExtractionModeArchive; any other value errors
+    PollingInterval   time.Duration         // no default; passed directly to time.NewTicker, which panics for values <= 0 — effectively required to be positive
+    StartSCN          uint64                // only consulted when SCNType == OracleSCNTypeNumber; used as-is
+    BatchSize         int                   // <= 0 means no FETCH FIRST clause is added (unbounded fetch); > 0 adds `FETCH FIRST <BatchSize> ROWS ONLY`
 }
+
+// OracleSCNType selects how OracleSourceCDCOptions.StartSCN is resolved.
+type OracleSCNType string
+
+const (
+    OracleSCNTypeNumber    OracleSCNType = "number"
+    OracleSCNTypeTimestamp OracleSCNType = "timestamp"
+)
+
+// OracleExtractionMode selects the LogMiner extraction strategy. Any value
+// other than the two below returns an "unsupported extraction mode" error —
+// there is no default.
+type OracleExtractionMode string
+
+const (
+    OracleExtractionModeHotlog  OracleExtractionMode = "HOTLOG"
+    OracleExtractionModeArchive OracleExtractionMode = "ARCHIVE"
+)
+
+// OracleOperation is a LogMiner V$LOGMNR_CONTENTS.OPERATION value, used to
+// filter OracleSourceCDCOptions.IncludeOperations.
+type OracleOperation string
+
+const (
+    OracleOperationInsert OracleOperation = "INSERT"
+    OracleOperationUpdate OracleOperation = "UPDATE"
+    OracleOperationDelete OracleOperation = "DELETE"
+    OracleOperationDDL    OracleOperation = "DDL"
+)
 ```
 
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - Direct Oracle connection instance for data extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - Direct Oracle connection instance for data extraction, available on `OracleSourceFetch`
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
-- **Advanced CDC Configuration** - Comprehensive change data capture settings with SCN management, retry logic, and session handling
+- **Advanced CDC Configuration** - SCN management and polling-based change tracking
 - **CDC ParseFn** - Controls how raw Oracle change events are shaped into pipeline records
 
-### ChangeEvent
+:::note LogMiner sessions are per-poll, not long-lived
+Each poll tick acquires its own connection, calls `START_LOGMNR` with just `STARTSCN` (letting Oracle auto-discover the needed redo/archive log files), queries `V$LOGMNR_CONTENTS`, then ends the session — all within that single tick. There is no persistent LogMiner session across polls, so there's nothing to periodically refresh, and no per-file `ADD_LOGFILE` call to retry with backoff. (An earlier implementation kept a long-lived session with configurable refresh/retry behavior, but `DBMS_LOGMNR.ADD_LOGFILE` raises `ORA-65040` when connected to a Pluggable Database, so that approach was replaced with the current auto-discovery design.) On a transient extraction error, the source simply logs and retries at the next `PollingInterval` tick.
+:::
 
-`ChangeEvent` is the typed value the engine passes to the `ParseFn` of any CDC or replication-based source tune. All fields are populated by the engine before your function is called.
+### OracleChangeEvent
+
+`OracleChangeEvent` is the typed value the engine passes to the `ParseFn` of `OracleSourceCDCOptions`. All fields are populated by the engine before your function is called.
 
 ```go
-type ChangeEvent struct {
+type OracleChangeEvent struct {
     Before    map[string]any
     After     map[string]any
-    Meta      map[string]any
     Operation ChangeEventOperation
     Database  string
     Table     string
-    Position  string // LSN for Postgres/MSSQL · GTID for MySQL/MariaDB · SCN for Oracle
+    Position  string // SCN represented as string
+    SCN       uint64
+    Timestamp time.Time
+    RedoSQL   string
+    UndoSQL   string
 }
 
 type ChangeEventOperation string
@@ -116,14 +139,27 @@ const (
 | `Operation` | Change type: `INSERT`, `UPDATE`, `DELETE`, or `DDL`. |
 | `Database` | Source database name. |
 | `Table` | Source table name. |
-| `Position` | Oracle SCN at the time of the change. |
-| `Meta` | Oracle-specific extras (e.g. redo/undo SQL). |
+| `Position` | Oracle SCN at the time of the change, represented as a string. |
+| `SCN` | Oracle SCN at the time of the change, as a numeric value. |
+| `Timestamp` | Time the change was captured. |
+| `RedoSQL` | Redo SQL for the change, when available. |
+| `UndoSQL` | Undo SQL for the change, when available. |
+
+### Record Position Metadata
+
+`GenerateCDC` (LogMiner) reads stamp each delivered record's `Meta` with the SCN that produced it:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_oracle_scn` | `models.MetaOracleSCN` | The SCN, as `uint64` (matching `OracleSourceCDCOptions.StartSCN`'s own type), that produced this change |
+
+`GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from. Reusing this value directly as `StartSCN` (with `SCNType: models.OracleSCNTypeNumber`) on a fresh `GenerateCDC` call resumes LogMiner from exactly this point.
 
 ### Example Source
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -152,37 +188,35 @@ func (c *IUseConnector) FetchRecords(param *models.OracleSourceFetch) <-chan map
             for i, col := range cols {
                 record[col] = vals[i]
             }
-            ch <- record
+            ch <- &models.Record{Data: record}
         }
     }()
 
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.OracleSourceQuery) (*models.OracleSourceQueryOptions, error) {
     query := fmt.Sprintf("SELECT * FROM %s WHERE ROWNUM <= 10", param.State.GetName())
-    return &models.OracleSourceQueryTune{
+    return &models.OracleSourceQueryOptions{
         Query:           query,
         RecordsPerBatch: 1000,
         PrefetchSize:    100,
     }, nil
 }
 
-func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCTune, error) {
-    return &models.OracleSourceCDCTune{
-        SourceTables:           []string{param.State.GetName()},
-        SCNType:                "CURRENT",
-        ExtractionMode:         "HOTLOG",
-        IncludeOperations:      []string{"INSERT", "UPDATE", "DELETE"},
-        BatchSize:              100,
-        PollingInterval:        5 * time.Second,
-        SessionRefreshMode:     "TIME_BASED",
-        SessionRefreshInterval: 30 * time.Minute,
-        MaxRetries:             3,
-        BaseRetryDelayMs:       500,
-        MaxRetryDelayMs:        10000,
-        RetryJitter:            0.3,
-        ParseFn: func(event models.ChangeEvent) (map[string]any, error) {
+func (c *IUseConnector) GenerateCDC(param *models.OracleSourceCDC) (*models.OracleSourceCDCOptions, error) {
+    return &models.OracleSourceCDCOptions{
+        SourceTables:   []string{param.State.GetName()},
+        SCNType:        "CURRENT", // anything other than OracleSCNTypeNumber/OracleSCNTypeTimestamp falls through to the DB's current SCN
+        ExtractionMode: models.OracleExtractionModeHotlog,
+        IncludeOperations: []models.OracleOperation{
+            models.OracleOperationInsert,
+            models.OracleOperationUpdate,
+            models.OracleOperationDelete,
+        },
+        BatchSize:       100, // <= 0 would mean unbounded fetch
+        PollingInterval: 5 * time.Second,
+        ParseFn: func(event models.OracleChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
                 record = event.Before
@@ -205,14 +239,16 @@ The Oracle destination interface provides structured data loading operations:
 
 ```go
 type IClientDBOracleDest interface {
-    GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error)
+    GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryPayload, error)
+    GenerateOptions(param *models.OracleDestQuery) (*models.OracleDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Query Generation** - Optimized INSERT, UPDATE, and MERGE operations
-- **Batch Processing** - Receives a batch of records and returns one query tune per record
+- **Batch Processing** - Receives a batch of records and returns one query payload per record
+- **Options Generation** - Hook for destination-wide options (currently `OracleDestOptions` carries no fields)
 
 ### Destination Configuration Structure
 
@@ -222,38 +258,38 @@ When using Oracle as a destination, the system uses this struct definition:
 // Destination operations
 type OracleDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *sql.DB
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type OracleDestQueryTune struct {
+type OracleDestQueryPayload struct {
     Query string
     Value []any
 }
+
+type OracleDestOptions struct{}
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of data records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
+- **Records Processing** - Handles a batch of `*models.Record` values (each wrapping a `Data` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups
 - **Data Mapping** - Ensures proper field mapping between source and destination schemas
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryTune, error) {
-    tunes := make([]*models.OracleDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.OracleDestQueryPayload, error) {
+    payloads := make([]*models.OracleDestQueryPayload, 0, len(param.Records))
 
     for i, rec := range param.Records {
-        cols := make([]string, 0, len(rec))
-        placeholders := make([]string, 0, len(rec))
-        args := make([]any, 0, len(rec))
+        cols := make([]string, 0, len(rec.Data))
+        placeholders := make([]string, 0, len(rec.Data))
+        args := make([]any, 0, len(rec.Data))
 
         j := 1
-        for k, v := range rec {
+        for k, v := range rec.Data {
             cols = append(cols, k)
             placeholders = append(placeholders, ":v"+strconv.Itoa(j))
             args = append(args, v)
@@ -266,22 +302,22 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.
             strings.Join(placeholders, ", "),
         )
 
-        tunes = append(tunes, &models.OracleDestQueryTune{
+        payloads = append(payloads, &models.OracleDestQueryPayload{
             Query: query,
             Value: args,
         })
         _ = i
     }
 
-    return tunes, nil
+    return payloads, nil
 }
 ```
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -294,20 +330,20 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to Oracle connection
-oracleConn, err := CastAsOracleDBConnection(engine)
+// Cast IDatabaseConnInfo to Oracle connection
+oracleConn, err := CastAsOracleConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Oracle connection: %v", err)
 }
 
-// Now you can use the underlying Oracle connection directly
-// oracleConn is of type *sql.DB
+// oracleConn is of type models.DBConnector[*sql.DB] — unwrap the driver
+// client via .Client
+rows, err := oracleConn.Client.Query("SELECT 1 FROM DUAL")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid Oracle connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IOracleConnector` capability interface (`GetOracleClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

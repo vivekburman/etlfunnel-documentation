@@ -10,10 +10,10 @@ The REST API source interface supports four extraction approaches:
 
 ```go
 type IClientRESTAPISource interface {
-    GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateTune, error)
-    GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookTune, error)
-    GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorTune, error)
-    FetchRecords(param *models.RESTAPISourceFetch) <-chan map[string]any
+    GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateOptions, error)
+    GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookOptions, error)
+    GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorOptions, error)
+    FetchRecords(param *models.RESTAPISourceFetch) <-chan *models.Record
 }
 ```
 
@@ -28,8 +28,7 @@ type IClientRESTAPISource interface {
 type RESTAPISourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *http.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 // RESTAPIRawResponse carries the raw HTTP response passed to ParseFn.
@@ -39,32 +38,32 @@ type RESTAPIRawResponse struct {
     StatusCode int
 }
 
-type RESTAPISourcePaginateTune struct {
-    Headers       map[string]string
-    QueryParams   map[string]string
-    Body          map[string]any // for POST-based pagination
-    Method        string         // GET, POST
-    Path          string         // relative path, e.g. "/v1/reports"
-    PageToken     string         // injected by engine per page
-    MaxPages      int            // 0 = unlimited
-    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error)
-    NextPageToken func(body []byte, headers http.Header) (string, bool)
+type RESTAPISourcePaginateOptions struct {
+    Headers       map[string]string // nil/empty means no extra headers are added
+    QueryParams   map[string]string // nil/empty means no extra query params are added
+    Body          map[string]any    // for POST-based pagination; nil means no body is sent
+    Method        string            // GET, POST — "" has no app default and is passed to http.NewRequestWithContext, which the Go stdlib treats as GET
+    Path          string            // relative path, e.g. "/v1/reports" — no default, required
+    PageToken     string            // injected by engine per page
+    MaxPages      int               // 0 = unlimited
+    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
+    NextPageToken func(body []byte, headers http.Header) (string, bool) // required; the source errors if nil
 }
 
-type RESTAPISourceCursorTune struct {
-    Path          string
-    CursorParam   string // e.g. "since", "after", "start_date"
-    CursorValue   string // initial cursor value
-    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error)
-    NextPageToken func(body []byte, headers http.Header) (string, bool)
+type RESTAPISourceCursorOptions struct {
+    Path          string // no default, required
+    CursorParam   string // e.g. "since", "after", "start_date" — no default, used verbatim as the query-param key
+    CursorValue   string // initial cursor value — "" is simply the initial value sent on the first request
+    ParseFn       func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
+    NextPageToken func(body []byte, headers http.Header) (string, bool) // required; the source errors if nil
 }
 
-type RESTAPISourceWebhookTune struct {
-    ListenAddr       string // e.g. ":8081"
-    Path             string // e.g. "/webhook"
-    Secret           string // for HMAC verification
+type RESTAPISourceWebhookOptions struct {
+    ListenAddr       string // e.g. ":8081" — "" has no app default; passed to http.Server{Addr: ""}, which the Go stdlib defaults to ":http" (port 80)
+    Path             string // e.g. "/webhook" — no default, required
+    Secret           string // for HMAC verification — "" (the default) skips HMAC verification entirely; all requests are accepted
     RecordBufferSize int    // channel buffer size; 0 = unbuffered
-    ParseFn          func(RESTAPIRawResponse) ([]map[string]any, error)
+    ParseFn          func(RESTAPIRawResponse) ([]map[string]any, error) // required; the source errors if nil
 }
 ```
 
@@ -72,19 +71,33 @@ These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
 - **Source Connection** - `*http.Client` configured with auth transport and base URL
-- **Destination DB Connection** - Target database interface for processed data
 - **Auxiliary DB Connections** - Additional database connections for enrichment
 - **ParseFn** - Controls how raw HTTP response bytes become pipeline records; the engine never decides the record shape
 - **NextPageToken** - Controls pagination advance; return `("", false)` to signal the source is exhausted
+- **Method** - Left as `""`, requests are sent as GET (the Go stdlib's treatment of an empty method) — there is no app-level default beyond that
+- **MaxPages** - `0` means unlimited pages
+- **Secret** (webhook) - `""` (the zero value) disables HMAC verification entirely, accepting all incoming requests
+- **ListenAddr** (webhook) - `""` is passed straight to `http.Server{Addr: ""}`, which the Go stdlib binds to `:http` (port 80)
+
+### Record Position Metadata
+
+Pagination and cursor reads stamp each delivered record's `Meta` with the token/cursor value that fetched its page:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_restapi_page_token` | `models.MetaRESTAPIPageToken` | The `PageToken` that fetched the record's current page (pagination mode) |
+| `_restapi_cursor` | `models.MetaRESTAPICursor` | The cursor value that fetched the record's current page (cursor mode) |
+
+Like Cassandra's page state, this is page-granularity, not row-granularity: resuming a checkpoint hook with this value re-fetches the whole page from the top rather than risk skipping a row not yet delivered before a crash. Webhook reads never set either key — a webhook delivery has no pagination position to resume from.
 
 ### Example Source
 
 ```go
 // Cursor-based incremental extraction
-func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorTune, error) {
+func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceCursorOptions, error) {
     startCursor, _ := param.State.GetReplicaProps()["start_cursor"].(string)
 
-    return &models.RESTAPISourceCursorTune{
+    return &models.RESTAPISourceCursorOptions{
         Path:        "/api/v1/events?limit=200",
         CursorParam: "cursor",
         CursorValue: startCursor,
@@ -111,8 +124,8 @@ func (c *IUseConnector) GenerateCursorRequest(param *models.RESTAPISourceFetch) 
 }
 
 // Offset-based pagination
-func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateTune, error) {
-    return &models.RESTAPISourcePaginateTune{
+func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourcePaginateOptions, error) {
+    return &models.RESTAPISourcePaginateOptions{
         Method:   "GET",
         Path:     "/api/v1/records",
         MaxPages: 0, // unlimited
@@ -136,8 +149,8 @@ func (c *IUseConnector) GeneratePaginateRequest(param *models.RESTAPISourceFetch
 }
 
 // Webhook listener
-func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookTune, error) {
-    return &models.RESTAPISourceWebhookTune{
+func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch) (*models.RESTAPISourceWebhookOptions, error) {
+    return &models.RESTAPISourceWebhookOptions{
         ListenAddr:       ":8080",
         Path:             "/webhook/events",
         Secret:           "my-webhook-secret",
@@ -157,8 +170,8 @@ func (c *IUseConnector) GenerateWebhookRequest(param *models.RESTAPISourceFetch)
     }, nil
 }
 
-func (c *IUseConnector) FetchRecords(param *models.RESTAPISourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.RESTAPISourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
     close(ch) // not used when Generate* methods are active
     return ch
 }
@@ -172,14 +185,16 @@ The REST API destination interface provides HTTP write operations:
 
 ```go
 type IClientRESTAPIDest interface {
-    GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryTune, error)
+    GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryPayload, error)
+    GenerateOptions(param *models.RESTAPIDestQuery) (*models.RESTAPIDestOptions, error)
 }
 ```
 
 This interface enables:
 
 - **Per-record HTTP requests** - Method, path, headers, and body per record
-- **Batch processing** - Receives a batch of records and returns one tune per HTTP request
+- **Batch processing** - Receives a batch of records and returns one payload per HTTP request
+- **One-time write tuning** - `GenerateOptions` runs once, before the pipeline starts consuming records
 
 ### Destination Configuration Structure
 
@@ -187,51 +202,58 @@ This interface enables:
 // Destination operations
 type RESTAPIDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *http.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type RESTAPIDestQueryTune struct {
-    Headers map[string]string
-    Body    map[string]any
-    Method  string // POST, PUT, PATCH, DELETE
-    Path    string // e.g. "/v1/events"
+type RESTAPIDestQueryPayload struct {
+    Headers map[string]string // nil means no headers are sent
+    Body    map[string]any    // nil means no body is sent
+    Method  string            // POST, PUT, PATCH, DELETE — "" has no app default and is passed to http.NewRequestWithContext, which the Go stdlib treats as GET
+    Path    string            // e.g. "/v1/events" — no default, required
 }
+
+// RESTAPIDestOptions has no settings today: ApplyOptions is a no-op regardless of content.
+type RESTAPIDestOptions struct{}
 ```
 
 ### Example Destination
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryTune, error) {
-    tunes := make([]*models.RESTAPIDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.RESTAPIDestQuery) ([]*models.RESTAPIDestQueryPayload, error) {
+    payloads := make([]*models.RESTAPIDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
-        tunes = append(tunes, &models.RESTAPIDestQueryTune{
+        payloads = append(payloads, &models.RESTAPIDestQueryPayload{
             Method: "POST",
             Path:   "/api/v1/ingest",
             Headers: map[string]string{
                 "Content-Type": "application/json",
             },
-            Body: rec,
+            Body: rec.Data,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.RESTAPIDestQuery) (*models.RESTAPIDestOptions, error) {
+    return nil, nil // no one-time write tuning needed
 }
 ```
 
 ## Connection Casting
 
 ```go
-// Cast IDatabaseEngine to HTTP client
-httpClient, err := CastAsRESTAPIConnection(engine)
+// Cast IDatabaseConnInfo to a REST API connector
+apiConn, err := CastAsRESTAPIConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to REST API connection: %v", err)
 }
 
-// httpClient is of type *http.Client
+// apiConn is of type models.APIConnector — Client (*http.Client, auth already
+// wired in) and BaseURL are both exposed as fields
+resp, err := apiConn.Client.Get(apiConn.BaseURL + "/health")
 ```
 
 :::tip Connection Casting

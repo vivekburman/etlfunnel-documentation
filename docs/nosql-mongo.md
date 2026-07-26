@@ -12,10 +12,10 @@ The MongoDB source interface supports four primary extraction approaches through
 
 ```go
 type IClientDBMongoSource interface {
-    GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error)
-    GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error)
-    GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error)
-    FetchRecords(param *models.MongoSourceFetch) <-chan map[string]any
+    GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryOptions, error)
+    GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsOptions, error)
+    GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogOptions, error)
+    FetchRecords(param *models.MongoSourceFetch) <-chan *models.Record
 }
 ```
 
@@ -33,59 +33,66 @@ When configuring MongoDB as a source database, the system uses these struct defi
 type MongoSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *mongo.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
-    DestDBConn         IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceQuery struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceStreams struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceOplog struct {
     State              IPipelineRuntimeState
-    SourceDBConn       *mongo.Client
-    DestDBConn         IDatabaseEngine
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type MongoSourceQueryTune struct {
+type MongoSourceQueryOptions struct {
     CommandDoc bson.D
 }
 
-type MongoStreamsTune struct {
+type MongoStreamsOptions struct {
+    Collection          string
     ChangeStreamOptions options.ChangeStreamOptionsBuilder
     Pipeline            []bson.M
 }
 
-type MongoSourceOplogTune struct {
-    Filter  bson.M
-    Options options.FindOptionsBuilder
+type MongoSourceOplogOptions struct {
+    Collection string
+    Filter     bson.M
+    Options    options.FindOptionsBuilder
 }
 ```
 
 These structures provide:
 
 - **Pipeline State** - Runtime state interface providing pipeline context, logger, and replica metadata
-- **Source DB Connection** - MongoDB client instance for document extraction
-- **Destination DB Connection** - Target database interface for processed data
+- **Source DB Connection** - MongoDB client instance for document extraction, available on `MongoSourceFetch` (used by the user-defined capture mode)
 - **Auxiliary DB Connections** - Additional database connections for lookup operations and data enrichment
 - **BSON Command Documents** - Native MongoDB query format for flexible document operations
+- **Collection** - `MongoStreamsOptions` and `MongoSourceOplogOptions` each carry the target collection name alongside their filter/pipeline
+
+### Record Position Metadata
+
+`GenerateStream` and `GenerateOplogTrailing` reads each stamp their own resume position on the delivered record's `Meta`:
+
+| Key | Constant | Description |
+|-----|----------|--------------|
+| `_mongo_resume_token` | `models.MetaMongoResumeToken` | `GenerateStream` reads: the change stream's resume token, always set |
+| `_mongo_cluster_time` | `models.MetaMongoClusterTime` | `GenerateStream` reads: the change event's cluster time, when present |
+| `_mongo_oplog_ts` | `models.MetaMongoOplogTimestamp` | `GenerateOplogTrailing` reads: the oplog entry's own timestamp, when present |
+
+`GenerateQuery` reads never set `Meta` — a one-shot aggregation has no position to resume from.
 
 ### Example Source Implementation
 
 ```go
-func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan map[string]any {
-    ch := make(chan map[string]any)
+func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan *models.Record {
+    ch := make(chan *models.Record)
 
     go func() {
         defer close(ch)
@@ -104,23 +111,23 @@ func (c *IUseConnector) FetchRecords(param *models.MongoSourceFetch) <-chan map[
                 log.Println("decode error:", err)
                 continue
             }
-            ch <- document
+            ch <- &models.Record{Data: document}
         }
     }()
 
     return ch
 }
 
-func (c *IUseConnector) GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryTune, error) {
+func (c *IUseConnector) GenerateQuery(param *models.MongoSourceQuery) (*models.MongoSourceQueryOptions, error) {
     pipeline := bson.D{
         {"$match", bson.M{"status": "active"}},
         {"$sort", bson.M{"created_at": -1}},
         {"$limit", 10},
     }
-    return &models.MongoSourceQueryTune{CommandDoc: pipeline}, nil
+    return &models.MongoSourceQueryOptions{CommandDoc: pipeline}, nil
 }
 
-func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsTune, error) {
+func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*models.MongoStreamsOptions, error) {
     pipeline := []bson.M{
         {"$match", bson.M{"operationType": bson.M{"$in": []string{"insert", "update"}}}},
     }
@@ -129,13 +136,14 @@ func (c *IUseConnector) GenerateStream(param *models.MongoSourceStreams) (*model
         SetFullDocument("updateLookup").
         SetBatchSize(100)
 
-    return &models.MongoStreamsTune{
+    return &models.MongoStreamsOptions{
+        Collection:          param.State.GetName(),
         ChangeStreamOptions: *opts,
         Pipeline:            pipeline,
     }, nil
 }
 
-func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogTune, error) {
+func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*models.MongoSourceOplogOptions, error) {
     filter := bson.M{
         "ts": bson.M{"$gte": time.Now().Add(-1 * time.Hour)},
         "ns": bson.M{"$regex": "^etl\\." + param.State.GetName()},
@@ -145,9 +153,10 @@ func (c *IUseConnector) GenerateOplogTrailing(param *models.MongoSourceOplog) (*
         SetSort(bson.M{"$natural": 1}).
         SetNoCursorTimeout(true)
 
-    return &models.MongoSourceOplogTune{
-        Filter:  filter,
-        Options: *opts,
+    return &models.MongoSourceOplogOptions{
+        Collection: param.State.GetName(),
+        Filter:     filter,
+        Options:    *opts,
     }, nil
 }
 ```
@@ -162,7 +171,8 @@ The MongoDB destination interface provides structured document loading operation
 
 ```go
 type IClientDBMongoDest interface {
-    GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error)
+    GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryPayload, error)
+    GenerateOptions(param *models.MongoDestQuery) (*models.MongoDestOptions, error)
 }
 ```
 
@@ -171,7 +181,8 @@ This interface enables:
 - **Document Operations** - INSERT_ONE, INSERT_MANY, UPDATE_ONE, UPDATE_MANY operations
 - **Advanced Operations** - REPLACE_ONE, DELETE_ONE, DELETE_MANY operations  
 - **Bulk Processing** - BULK_WRITE operations for efficient batch processing
-- **Flexible Write Options** - Upsert, write concern, and validation bypass capabilities
+- **Flexible Write Options** - Upsert, hints, sort, array filters, and collation per payload
+- **Per-Collection Bulk Settings** - `GenerateOptions` returns write concern, ordering, and validation-bypass settings that can differ per collection
 
 ### Write Operation Types
 
@@ -189,17 +200,21 @@ const (
     MongoWriteBulkWrite  MongoWriteOperationType = "BULK_WRITE"
 )
 
-type MongoDBWriteOptions struct {
-    Comment          any
-    Hint             any
-    Sort             any
-    Let              any
-    WriteConcern     *writeconcern.WriteConcern
-    Collation        *options.Collation
-    ArrayFilters     []any
-    Upsert           bool
-    Ordered          bool
-    BypassValidation bool
+// MongoBulkCallSettings groups the bulk-write call options that apply to a
+// whole flush, as opposed to a single payload.
+type MongoBulkCallSettings struct {
+    Ordered          bool                       // always applied explicitly via opts.SetOrdered(Ordered); the Go zero value false is used literally — this differs from the MongoDB driver's own BulkWrite default of true, since this app always sets it rather than leaving it unset
+    BypassValidation bool                       // always applied explicitly via opts.SetBypassDocumentValidation(BypassValidation); zero value false
+    WriteConcern     *writeconcern.WriteConcern // only applied when non-nil; nil (the zero value) means the collection's inherited write concern is used
+    Comment          any                        // only set on the call when non-nil
+    Let              any                        // only set on the call when non-nil
+}
+
+// MongoDestOptions is returned by GenerateOptions. Default applies to every
+// collection unless overridden by a matching entry in PerCollection.
+type MongoDestOptions struct {
+    Default       MongoBulkCallSettings
+    PerCollection map[string]MongoBulkCallSettings
 }
 ```
 
@@ -211,36 +226,43 @@ When using MongoDB as a destination, the system uses this struct definition:
 // Destination operations
 type MongoDestQuery struct {
     State              IPipelineRuntimeState
-    Records            []map[string]any
-    SourceDBConn       IDatabaseEngine
-    DestDBConn         *mongo.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    Records            []*models.Record
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
-type MongoDestQueryTune struct {
-    Options   MongoDBWriteOptions
-    Query     any // filter document (e.g. bson.M{"_id": id})
-    Payload   any // document to write or update
-    Operation MongoWriteOperationType
+type MongoDestQueryPayload struct {
+    Collection   string
+    Query        any // filter document (e.g. bson.M{"_id": id})
+    Payload      any // document to write or update
+    Operation    MongoWriteOperationType
+    Hint         any
+    Sort         any
+    ArrayFilters []any
+    Upsert       bool
+    Collation    *options.Collation
 }
 ```
 
 This structure manages:
 
 - **Pipeline State** - Runtime state interface providing pipeline context and logger
-- **Records Processing** - Handles a batch of BSON document records for transformation and loading
-- **Connection Management** - Maintains source, destination, and auxiliary database connections
-- **Operation Configuration** - Specifies write operation type and associated options
+- **Records Processing** - Handles a batch of `*models.Record` values (each with a `Data` map and a `Meta` map) for transformation and loading
+- **Connection Management** - Maintains auxiliary database connections for lookups; the destination MongoDB connection itself is managed internally and is not passed through this struct
+- **Operation Configuration** - Specifies write operation type, target collection, and associated per-payload options
+
+:::note `Ordered` default differs from the MongoDB driver
+Leaving `MongoBulkCallSettings.Ordered` unset resolves to the Go zero value `false`, because it's always applied explicitly via `SetOrdered`. This is the opposite of the MongoDB driver's own `BulkWrite` default, which is `true` when the option is left unset entirely. If you want ordered bulk writes, set `Ordered: true` explicitly.
+:::
 
 ### Example Destination Implementation
 
 ```go
-func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryTune, error) {
-    tunes := make([]*models.MongoDestQueryTune, 0, len(param.Records))
+func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.MongoDestQueryPayload, error) {
+    payloads := make([]*models.MongoDestQueryPayload, 0, len(param.Records))
 
     for _, rec := range param.Records {
         document := bson.M{}
-        for k, v := range rec {
+        for k, v := range rec.Data {
             document[k] = v
         }
 
@@ -250,27 +272,35 @@ func (c *IUseConnector) GenerateQuery(param *models.MongoDestQuery) ([]*models.M
             delete(document, "_id")
         }
 
-        tunes = append(tunes, &models.MongoDestQueryTune{
-            Operation: models.MongoWriteUpdateOne,
-            Query:     filter,
-            Payload:   document,
-            Options: models.MongoDBWriteOptions{
-                Upsert:       true,
-                WriteConcern: writeconcern.W1(),
-                Ordered:      true,
-            },
+        payloads = append(payloads, &models.MongoDestQueryPayload{
+            Collection: param.State.GetName(),
+            Operation:  models.MongoWriteUpdateOne,
+            Query:      filter,
+            Payload:    bson.M{"$set": document},
+            Upsert:     true,
         })
     }
 
-    return tunes, nil
+    return payloads, nil
+}
+
+func (c *IUseConnector) GenerateOptions(param *models.MongoDestQuery) (*models.MongoDestOptions, error) {
+    return &models.MongoDestOptions{
+        // Applies to every collection this connector writes to unless a
+        // PerCollection entry overrides it.
+        Default: models.MongoBulkCallSettings{
+            Ordered:      true,
+            WriteConcern: writeconcern.W1(),
+        },
+    }, nil
 }
 ```
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety for MongoDB-specific operations.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety for MongoDB-specific operations.
 
 ### Connection Management
 
@@ -283,21 +313,20 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to MongoDB client
-mongoClient, err := CastAsMongoDBConnection(engine)
+// Cast IDatabaseConnInfo to MongoDB client
+mongoConn, err := CastAsMongoConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MongoDB connection: %v", err)
 }
 
-// Now you can use the native MongoDB client directly
-// mongoClient is of type *mongo.Client
-collection := mongoClient.Database("etl").Collection("documents")
+// mongoConn is of type models.DBConnector[*mongo.Client] — unwrap the native
+// client via .Client
+collection := mongoConn.Client.Database("etl").Collection("documents")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid MongoDB client
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMongoConnector` capability interface (`GetMongoClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

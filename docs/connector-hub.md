@@ -26,6 +26,14 @@ The Connector Hub allows you to configure and manage connections to various data
 ### API
 - REST API
 
+### File
+- CSV
+- JSON
+- Excel
+- Parquet
+- Avro
+- Fixed Width
+
 ## Database Connectors
 
 ## Relational DB Connectors
@@ -50,11 +58,11 @@ MySQL connector provides robust integration with MySQL databases, supporting mul
 
 - **By Query**: Standard SQL query-based data extraction
 - **By Bin Logs**: Monitor MySQL binary logs for real-time change detection
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
 :::note
-The Server ID parameter is only required when using the "By Bin Logs" strategy and must be unique across all MySQL replicas.
+The Server ID parameter is always required at configuration time regardless of the selected strategy, but it is only functionally used when capturing via "By Bin Logs" — it must be unique across all MySQL replicas.
 :::
 
 ### MariaDB Connector
@@ -75,7 +83,7 @@ MariaDB connector offers the same functionality as MySQL due to their compatibil
 
 - **By Query**: Standard SQL query-based data extraction
 - **By Bin Logs**: Real-time monitoring of MariaDB binary logs
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
 ### PostgreSQL Connector
@@ -104,7 +112,7 @@ PostgreSQL connector leverages advanced PostgreSQL features for efficient data p
 - **By Query**: Standard SQL query-based data extraction
 - **By Notification Channel**: PostgreSQL LISTEN/NOTIFY mechanism
 - **By WAL**: Write-Ahead Log monitoring for real-time changes
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
 :::tip
@@ -130,7 +138,7 @@ SQL Server connector provides enterprise-grade integration with Microsoft SQL Se
 - **By Query**: Standard SQL query-based data extraction
 - **By Service Broker**: SQL Server Service Broker messaging
 - **By Change Data Capture**: Built-in CDC functionality
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
 :::info
@@ -155,7 +163,7 @@ Oracle connector supports enterprise Oracle databases with multiple change detec
 **Data Processing Strategies:**
 - **By Query**: Standard SQL query-based data extraction
 - **By Change Data Capture**: Oracle GoldenGate or Streams CDC
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination database with query generation for data insertion
 
 ## Non-Relational DB Connectors
@@ -179,7 +187,7 @@ Redis connector enables integration with Redis key-value stores, supporting vari
 - **By Keys**: Fetch data for all specified keys and pattern matches.
 - **By Streams**: Redis Streams for real-time data processing
 - **By Keyspace**: Keyspace notifications for change detection
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination Redis instance with command generation for data storage
 
 :::warning
@@ -200,14 +208,17 @@ MongoDB connector provides comprehensive integration with MongoDB databases, sup
 | Password | Password | - | MongoDB password for authentication |
 | Is Atlas | Boolean | false | Enable for MongoDB Atlas connections |
 | Database | Text | - | Target database name |
-| Collection | Text | - | Target collection name |
 | Data Processing Strategy | Dropdown | By Query | Method for data retrieval |
+
+:::note
+Collection is not part of the connection configuration — it's resolved per query/record on the read or write options instead, since a single connector instance can read from or write to multiple collections within one run.
+:::
 
 **Data Processing Strategies:**
 - **By Query**: Execute MongoDB query to fetch data for matching documents
 - **By Streams**: Change Streams for real-time monitoring
 - **By Oplog Trailing**: Operation log tailing for change detection
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination MongoDB with operation generation for document insertion
 
 :::tip
@@ -231,7 +242,7 @@ Elasticsearch connector enables integration with Elasticsearch clusters for full
 
 **Data Processing Strategies:**
 - **By Query**: DSL query-based document retrieval
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with index operation generation for document insertion
 
 ### Cassandra Connector
@@ -254,7 +265,7 @@ Cassandra connector provides integration with Apache Cassandra clusters for high
 
 **Data Processing Strategies:**
 - **By Query**: CQL query-based row retrieval
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with CQL generation for row insertion
 
 ### RabbitMQ Connector
@@ -273,8 +284,9 @@ RabbitMQ connector provides integration with RabbitMQ message brokers for event-
 | Use TLS | Boolean | false | Enable TLS encryption |
 
 **Data Processing Strategies:**
-- **By Consume**: Consume messages from a queue in real time
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Queue**: Consume messages directly from a named queue in real time
+- **By Exchange**: Bind to an exchange (with a routing key/pattern) and consume the resulting queue
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with message publishing for data delivery
 
 ### Kafka Connector
@@ -295,8 +307,9 @@ Kafka connector enables integration with Apache Kafka clusters for high-throughp
 | Kafka Version | Text | - | Broker version (e.g. 3.6.0); leave empty for auto-negotiate |
 
 **Data Processing Strategies:**
-- **By Consume**: Consume messages from a topic in real time
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Topic Subscription**: Join a consumer group and subscribe to one or more topics, letting Kafka handle partition assignment
+- **By Topic Assignment**: Explicitly assign specific topic-partitions to consume, bypassing consumer-group rebalancing
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with message production for data delivery
 
 ## API Connectors
@@ -322,10 +335,41 @@ REST API connector enables integration with any HTTP/HTTPS API endpoint, support
 | Password | Password | - | Password (for basic auth) |
 | TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
 
+**Custom Auth Parameters** (when Auth Type is `custom`):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Token URL | Text | - | Endpoint the connector calls to obtain a token (required) |
+| Method | Dropdown | POST | HTTP method used for the token request; empty resolves to `POST` |
+| Headers | Map | - | Extra headers sent with the token request, e.g. `Content-Type: application/json` |
+| Body | Text | - | Raw request body for the token request |
+| Token Path | Text | - | JSONPath into the token response body, e.g. `$.data.accessToken` (required) |
+| Expiry Path | Text | - | Optional JSONPath to a seconds-until-expiry field in the token response |
+| Token Prefix | Text | Bearer | Prefix applied ahead of the token when set on the outgoing `Authorization` header; empty resolves to `Bearer` |
+
 **Data Processing Strategies:**
-- **By Request**: Execute HTTP requests and stream response data
-- **By Custom Function**: User-implemented data extraction method returning `<-chan map[string]interface{}`
+- **By Pagination**: Follow page/offset-based pagination across successive requests
+- **By Webhook**: Receive records pushed to an inbound webhook endpoint rather than polling
+- **By Cursor**: Follow a cursor/token returned by the API to fetch the next page
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with HTTP request generation for data delivery
+
+## File Connectors
+
+File connectors (CSV, JSON, Excel, Parquet, Avro, Fixed Width) read from and write to files on disk rather than a database server, so their connection configuration is just a directory path — there is no host, port, or credentials to configure.
+
+**Configuration Parameters (all six file connectors):**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Directory | Text | - | Directory the connector scans (source) or writes into (destination) |
+
+**Data Processing Strategies (all six file connectors):**
+- **By Full Scan**: Scan matching files in the directory and stream every row/record as a source
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping)
+- **By Write Operation**: Use as a destination, writing records into files under the configured directory
+
+Each file type has its own set of source-scan and destination-write options (delimiter/header handling for CSV, sheet name for Excel, schema for Parquet/Avro, field positions for Fixed Width, etc.) — see the dedicated page for each file connector for the full option set.
 
 ## Connection Management
 
