@@ -249,12 +249,14 @@ func (c *IUseConnector) GenerateOptions(param *models.KafkaDestQuery) (*models.K
 
 ```go
 // Cast IDatabaseConnInfo to Kafka sarama.Client
-kafkaClient, err := CastAsKafkaConnection(engine)
+kafkaConn, err := CastAsKafkaConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Kafka connection: %v", err)
 }
 
-// kafkaClient is of type sarama.Client
+// kafkaConn is of type models.DBConnector[sarama.Client] — unwrap the
+// underlying client via .Client
+brokers := kafkaConn.Client.Brokers()
 ```
 
 :::tip Connection Casting

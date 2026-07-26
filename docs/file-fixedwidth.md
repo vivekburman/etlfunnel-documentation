@@ -216,18 +216,22 @@ func (c *IUseConnector) GenerateQuery(param *models.FixedWidthDestQuery) ([]*mod
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
+Use the `cast/fixedwidth` helper to resolve a generic `IDatabaseConnInfo` (e.g. an auxiliary connection) to its fixed-width source's configured base directory:
 
 ```go
-// Cast IDatabaseConnInfo to the underlying fixed-width file handle
-file, err := cast.FromPointer[os.File](engine)
+import castfixedwidth "etlfunnel/execution/cast/fixedwidth"
+
+// Cast IDatabaseConnInfo to a fixed-width file connector
+fixedWidthConn, err := castfixedwidth.CastAsFixedWidthConnection(engine)
 if err != nil {
-    return fmt.Errorf("failed to cast to fixed-width file handle: %v", err)
+    return fmt.Errorf("failed to cast to fixed-width connection: %v", err)
 }
 
-// file is of type *os.File
+// fixedWidthConn is of type models.FileConnector — Directory is the connect-
+// time-resolved base directory, not a file handle
+path := filepath.Join(fixedWidthConn.Directory, "export.txt")
 ```
 
 :::tip Connection Casting
-`FetchRecords` already receives the concrete `*os.File` via `SourceDBConn` — you only need `cast.FromPointer` when working with a fixed-width connection reached through `AuxiliaryDBConnMap`.
+`FetchRecords` already receives the concrete `*os.File` for the record currently being streamed via `SourceDBConn` — you only need `CastAsFixedWidthConnection` when working with a fixed-width connection reached through `AuxiliaryDBConnMap`, and it resolves the connector's base directory, not a specific file handle.
 :::

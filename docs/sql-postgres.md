@@ -320,14 +320,14 @@ if err != nil {
     return fmt.Errorf("failed to cast to PostgreSQL connection: %v", err)
 }
 
-// Now you can use the underlying PostgreSQL connection directly
-// pgConn is of type *pgx.Conn
+// pgConn is of type models.DBConnector[*pgx.Conn] — unwrap the driver client
+// via .Client
+rows, err := pgConn.Client.Query(context.Background(), "SELECT 1")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid PostgreSQL connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IPostgresConnector` capability interface (`GetPostgresClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

@@ -314,20 +314,19 @@ The system includes built-in functionality to cast generic database engine inter
 
 ```go
 // Cast IDatabaseConnInfo to MongoDB client
-mongoClient, err := CastAsMongoConnection(engine)
+mongoConn, err := CastAsMongoConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MongoDB connection: %v", err)
 }
 
-// Now you can use the native MongoDB client directly
-// mongoClient is of type *mongo.Client
-collection := mongoClient.Database("etl").Collection("documents")
+// mongoConn is of type models.DBConnector[*mongo.Client] — unwrap the native
+// client via .Client
+collection := mongoConn.Client.Database("etl").Collection("documents")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid MongoDB client
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMongoConnector` capability interface (`GetMongoClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

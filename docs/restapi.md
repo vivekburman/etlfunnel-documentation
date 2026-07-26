@@ -245,13 +245,15 @@ func (c *IUseConnector) GenerateOptions(param *models.RESTAPIDestQuery) (*models
 ## Connection Casting
 
 ```go
-// Cast IDatabaseConnInfo to HTTP client
-httpClient, err := CastAsRESTAPIConnection(engine)
+// Cast IDatabaseConnInfo to a REST API connector
+apiConn, err := CastAsRESTAPIConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to REST API connection: %v", err)
 }
 
-// httpClient is of type *http.Client
+// apiConn is of type models.APIConnector — Client (*http.Client, auth already
+// wired in) and BaseURL are both exposed as fields
+resp, err := apiConn.Client.Get(apiConn.BaseURL + "/health")
 ```
 
 :::tip Connection Casting

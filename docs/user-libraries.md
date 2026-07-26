@@ -150,7 +150,9 @@ func GetAuxPostgresConn(connMap map[string]models.IDatabaseConnInfo) (*pgx.Conn,
     if err != nil {
         return nil, fmt.Errorf("failed to cast AuxDB connection: %w", err)
     }
-    return conn, nil
+    // CastAsPostgresConnection returns models.DBConnector[*pgx.Conn]; unwrap
+    // via .Client to keep this helper's return type a bare *pgx.Conn
+    return conn.Client, nil
 }
 ```
 

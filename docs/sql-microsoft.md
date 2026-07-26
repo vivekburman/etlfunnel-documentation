@@ -338,14 +338,14 @@ if err != nil {
     return fmt.Errorf("failed to cast to SQL Server connection: %v", err)
 }
 
-// Now you can use the underlying SQL Server connection directly
-// sqlServerConn is of type *sql.DB
+// sqlServerConn is of type models.DBConnector[*sql.DB] — unwrap the driver
+// client via .Client
+rows, err := sqlServerConn.Client.Query("SELECT 1")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid SQL Server connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMicrosoftServerConnector` capability interface (`GetMicrosoftServerClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

@@ -280,9 +280,9 @@ if err != nil {
     return fmt.Errorf("failed to cast to Elasticsearch connection: %v", err)
 }
 
-// Now you can use the underlying Elasticsearch client directly
-// elasticConn is of type *elasticsearch.Client
-info, err := elasticConn.Info()
+// elasticConn is of type models.DBConnector[*elasticsearch.Client] — unwrap
+// the underlying client via .Client
+info, err := elasticConn.Client.Info()
 if err != nil {
     return fmt.Errorf("failed to get cluster info: %v", err)
 }
@@ -290,8 +290,7 @@ if err != nil {
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid Elasticsearch connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IElasticsearchConnector` capability interface (`GetElasticsearchClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

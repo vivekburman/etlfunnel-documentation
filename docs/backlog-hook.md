@@ -101,7 +101,7 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
 		recordJSON, _ := json.Marshal(record.Data)
 		recordID := fmt.Sprintf("%v", record.Data["id"])
 
-		_, err := mysqlConn.Exec(query,
+		_, err := mysqlConn.Client.Exec(query,
 			param.State.GetName(),
 			recordID,
 			string(recordJSON),

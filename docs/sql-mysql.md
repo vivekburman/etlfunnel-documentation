@@ -263,14 +263,14 @@ if err != nil {
     return fmt.Errorf("failed to cast to MySQL connection: %v", err)
 }
 
-// Now you can use the underlying MySQL connection directly
-// mysqlConn is of type *client.Conn
+// mysqlConn is of type models.DBConnector[*client.Conn] — unwrap the driver
+// client via .Client
+result, err := mysqlConn.Client.Execute("SELECT 1")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid MySQL connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMySQLConnector` capability interface (`GetMySQLClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

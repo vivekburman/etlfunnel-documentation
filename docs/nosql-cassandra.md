@@ -246,12 +246,14 @@ func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*mode
 
 ```go
 // Cast IDatabaseConnInfo to Cassandra session
-cassandraSession, err := CastAsCassandraConnection(engine)
+cassandraConn, err := CastAsCassandraConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Cassandra connection: %v", err)
 }
 
-// cassandraSession is of type *gocql.Session
+// cassandraConn is of type models.DBConnector[*gocql.Session] — unwrap the
+// underlying session via .Client
+iter := cassandraConn.Client.Query("SELECT * FROM keyspace.table").Iter()
 ```
 
 :::tip Connection Casting

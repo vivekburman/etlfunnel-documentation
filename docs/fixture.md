@@ -90,7 +90,7 @@ func Setup(param *models.FixtureProps) error {
 	}
 
 	for _, stmt := range stmts {
-		if _, err := conn.Exec(context.Background(), stmt); err != nil {
+		if _, err := conn.Client.Exec(context.Background(), stmt); err != nil {
 			return fmt.Errorf("fixture setup: ddl exec: %w", err)
 		}
 	}
@@ -115,7 +115,7 @@ func Teardown(param *models.FixtureProps) error {
 		return fmt.Errorf("fixture teardown: connect auxdb: %w", err)
 	}
 
-	_, err = conn.Exec(context.Background(), `DELETE FROM ingestion_cursors WHERE updated_at < NOW() - INTERVAL '7 days'`)
+	_, err = conn.Client.Exec(context.Background(), `DELETE FROM ingestion_cursors WHERE updated_at < NOW() - INTERVAL '7 days'`)
 	if err != nil {
 		return fmt.Errorf("fixture teardown: cleanup: %w", err)
 	}

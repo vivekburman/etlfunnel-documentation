@@ -267,14 +267,14 @@ if err != nil {
     return fmt.Errorf("failed to cast to MariaDB connection: %v", err)
 }
 
-// Now you can use the underlying MariaDB connection directly
-// mariaConn is of type *client.Conn
+// mariaConn is of type models.DBConnector[*client.Conn] — unwrap the driver
+// client via .Client
+result, err := mariaConn.Client.Execute("SELECT 1")
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid MariaDB connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IMariaConnector` capability interface (`GetMariaClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

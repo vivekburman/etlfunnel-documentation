@@ -209,18 +209,22 @@ func (c *IUseConnector) GenerateQuery(param *models.AvroDestQuery) ([]*models.Av
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*ocf.Decoder` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
+Use the `cast/avro` helper to resolve a generic `IDatabaseConnInfo` (e.g. an auxiliary connection) to its Avro source's configured base directory:
 
 ```go
-// Cast IDatabaseConnInfo to the underlying Avro decoder
-decoder, err := cast.FromPointer[ocf.Decoder](engine)
+import castavro "etlfunnel/execution/cast/avro"
+
+// Cast IDatabaseConnInfo to an Avro file connector
+avroConn, err := castavro.CastAsAvroConnection(engine)
 if err != nil {
-    return fmt.Errorf("failed to cast to Avro decoder: %v", err)
+    return fmt.Errorf("failed to cast to Avro connection: %v", err)
 }
 
-// decoder is of type *ocf.Decoder
+// avroConn is of type models.FileConnector — Directory is the connect-time-
+// resolved base directory, not a decoder handle
+path := filepath.Join(avroConn.Directory, "export.avro")
 ```
 
 :::tip Connection Casting
-`FetchRecords` already receives the concrete `*ocf.Decoder` via `SourceDBConn` — you only need `cast.FromPointer` when working with an Avro connection reached through `AuxiliaryDBConnMap`.
+`FetchRecords` already receives the concrete `*ocf.Decoder` for the record currently being streamed via `SourceDBConn` — you only need `CastAsAvroConnection` when working with an Avro connection reached through `AuxiliaryDBConnMap`, and it resolves the connector's base directory, not a specific decoder handle.
 :::

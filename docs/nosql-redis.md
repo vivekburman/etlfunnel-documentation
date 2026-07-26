@@ -355,16 +355,15 @@ if err != nil {
     return fmt.Errorf("failed to cast to Redis connection: %v", err)
 }
 
-// Now you can use the underlying Redis connection directly
-// redisConn is of type *redis.Client
+// redisConn is of type models.DBConnector[*redis.Client] — unwrap the
+// underlying client via .Client
 ctx := context.Background()
-pong, err := redisConn.Ping(ctx).Result()
+pong, err := redisConn.Client.Ping(ctx).Result()
 ```
 
 The casting function handles:
 - **Nil Safety** - Validates input parameters before processing
-- **Type Validation** - Ensures the interface contains a valid Redis connection
-- **Field Extraction** - Retrieves the ConnectorInstance field from the database engine
+- **Capability Assertion** - Type-asserts the engine against the `IRedisConnector` capability interface (`GetRedisClient()`)
 - **Error Handling** - Provides detailed error messages for troubleshooting
 
 :::tip Connection Casting

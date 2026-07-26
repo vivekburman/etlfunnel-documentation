@@ -200,18 +200,22 @@ func (c *IUseConnector) GenerateQuery(param *models.ExcelDestQuery) ([]*models.E
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*excelize.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
+Use the `cast/excel` helper to resolve a generic `IDatabaseConnInfo` (e.g. an auxiliary connection) to its Excel source's configured base directory:
 
 ```go
-// Cast IDatabaseConnInfo to the underlying Excel workbook handle
-workbook, err := cast.FromPointer[excelize.File](engine)
+import castexcel "etlfunnel/execution/cast/excel"
+
+// Cast IDatabaseConnInfo to an Excel file connector
+excelConn, err := castexcel.CastAsExcelConnection(engine)
 if err != nil {
-    return fmt.Errorf("failed to cast to Excel workbook handle: %v", err)
+    return fmt.Errorf("failed to cast to Excel connection: %v", err)
 }
 
-// workbook is of type *excelize.File
+// excelConn is of type models.FileConnector — Directory is the connect-time-
+// resolved base directory, not a workbook handle
+path := filepath.Join(excelConn.Directory, "export.xlsx")
 ```
 
 :::tip Connection Casting
-`FetchRecords` already receives the concrete `*excelize.File` via `SourceDBConn` — you only need `cast.FromPointer` when working with an Excel connection reached through `AuxiliaryDBConnMap`.
+`FetchRecords` already receives the concrete `*excelize.File` for the record currently being streamed via `SourceDBConn` — you only need `CastAsExcelConnection` when working with an Excel connection reached through `AuxiliaryDBConnMap`, and it resolves the connector's base directory, not a specific workbook handle.
 :::

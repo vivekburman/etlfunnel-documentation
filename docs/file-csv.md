@@ -201,18 +201,22 @@ func (c *IUseConnector) GenerateQuery(param *models.CSVDestQuery) ([]*models.CSV
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
+Use the `cast/csv` helper to resolve a generic `IDatabaseConnInfo` (e.g. an auxiliary connection) to its CSV source's configured base directory:
 
 ```go
-// Cast IDatabaseConnInfo to the underlying CSV file handle
-file, err := cast.FromPointer[os.File](engine)
+import castcsv "etlfunnel/execution/cast/csv"
+
+// Cast IDatabaseConnInfo to a CSV file connector
+csvConn, err := castcsv.CastAsCSVConnection(engine)
 if err != nil {
-    return fmt.Errorf("failed to cast to CSV file handle: %v", err)
+    return fmt.Errorf("failed to cast to CSV connection: %v", err)
 }
 
-// file is of type *os.File
+// csvConn is of type models.FileConnector — Directory is the connect-time-
+// resolved base directory, not a file handle
+path := filepath.Join(csvConn.Directory, "export.csv")
 ```
 
 :::tip Connection Casting
-`FetchRecords` already receives the concrete `*os.File` via `SourceDBConn` — you only need `cast.FromPointer` when working with a CSV connection reached through `AuxiliaryDBConnMap`.
+`FetchRecords` already receives the concrete `*os.File` for the record currently being streamed via `SourceDBConn` — you only need `CastAsCSVConnection` when working with a CSV connection reached through `AuxiliaryDBConnMap`, and it resolves the connector's base directory, not a specific file handle.
 :::

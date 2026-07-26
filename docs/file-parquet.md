@@ -206,18 +206,22 @@ func (c *IUseConnector) GenerateQuery(param *models.ParquetDestQuery) ([]*models
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*parquet.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
+Use the `cast/parquet` helper to resolve a generic `IDatabaseConnInfo` (e.g. an auxiliary connection) to its Parquet source's configured base directory:
 
 ```go
-// Cast IDatabaseConnInfo to the underlying Parquet file handle
-file, err := cast.FromPointer[parquet.File](engine)
+import castparquet "etlfunnel/execution/cast/parquet"
+
+// Cast IDatabaseConnInfo to a Parquet file connector
+parquetConn, err := castparquet.CastAsParquetConnection(engine)
 if err != nil {
-    return fmt.Errorf("failed to cast to Parquet file handle: %v", err)
+    return fmt.Errorf("failed to cast to Parquet connection: %v", err)
 }
 
-// file is of type *parquet.File
+// parquetConn is of type models.FileConnector — Directory is the connect-
+// time-resolved base directory, not a file handle
+path := filepath.Join(parquetConn.Directory, "export.parquet")
 ```
 
 :::tip Connection Casting
-`FetchRecords` already receives the concrete `*parquet.File` via `SourceDBConn` — you only need `cast.FromPointer` when working with a Parquet connection reached through `AuxiliaryDBConnMap`.
+`FetchRecords` already receives the concrete `*parquet.File` for the record currently being streamed via `SourceDBConn` — you only need `CastAsParquetConnection` when working with a Parquet connection reached through `AuxiliaryDBConnMap`, and it resolves the connector's base directory, not a specific file handle.
 :::

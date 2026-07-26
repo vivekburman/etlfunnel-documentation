@@ -94,7 +94,7 @@ func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error) {
 		recordJSON, _ := json.Marshal(record.Data)
 		recordID := fmt.Sprintf("%v", record.Data["id"])
 
-		_, err := mysqlConn.Exec(query,
+		_, err := mysqlConn.Client.Exec(query,
 			param.State.GetName(),
 			recordID,
 			time.Now().UTC(),
