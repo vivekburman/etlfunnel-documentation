@@ -32,23 +32,23 @@ When configuring Redis as a source database, the system uses these struct defini
 // Source operations
 type RedisSourceKeys struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type RedisSourceKeyspace struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type RedisSourceStreams struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type RedisSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *redis.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 // RedisRawValue carries a raw value read from a Redis key.
@@ -79,14 +79,13 @@ type RedisSourceKeysOptions struct {
 // never inline at delivery. Without a consumer group there is no
 // pending-entries list (PEL) and nothing to ack.
 type RedisSourceStreamsOptions struct {
-    ConsumerGroup   string
-    ConsumerName    string
-    SpecificStartId string
-    StartFrom       string // "$" means "only new entries"; any other value, including "" (the zero value), is treated as a historical read start ID
-    StreamNames     []string
-    BatchSize       int // no default; used as-is for XREAD COUNT
-    BlockTime       int // no default; used as-is (milliseconds) for XREAD BLOCK — 0 means non-blocking (no BLOCK option sent)
-    ClaimMinIdle    int // <= 0 skips the pending-message-claim step entirely; > 0 claims messages idle for at least this many milliseconds
+    ConsumerGroup string
+    ConsumerName  string
+    StartFrom     string // "$" means "only new entries"; any other value, including "" (the zero value), is treated as a historical read start ID
+    StreamNames   []string
+    BatchSize     int // no default; used as-is for XREAD COUNT
+    BlockTime     int // no default; used as-is (milliseconds) for XREAD BLOCK — 0 means non-blocking (no BLOCK option sent)
+    ClaimMinIdle  int // <= 0 skips the pending-message-claim step entirely; > 0 claims messages idle for at least this many milliseconds
 }
 
 // RedisSourceKeySpacesOptions fields have no default logic — Database,
@@ -157,14 +156,13 @@ func (c *IUseConnector) GenerateKeys(param *models.RedisSourceKeys) (*models.Red
 
 func (c *IUseConnector) GenerateStreams(param *models.RedisSourceStreams) (*models.RedisSourceStreamsOptions, error) {
     return &models.RedisSourceStreamsOptions{
-        StreamNames:     []string{param.State.GetName() + ":events"},
-        ConsumerGroup:   "etl-group",
-        ConsumerName:    "etl-consumer-1",
-        SpecificStartId: "0",
-        StartFrom:       ">",
-        BatchSize:       50,
-        BlockTime:       1000,
-        ClaimMinIdle:    60000,
+        StreamNames:   []string{param.State.GetName() + ":events"},
+        ConsumerGroup: "etl-group",
+        ConsumerName:  "etl-consumer-1",
+        StartFrom:     ">",
+        BatchSize:     50,
+        BlockTime:     1000,
+        ClaimMinIdle:  60000,
     }, nil
 }
 
@@ -248,7 +246,7 @@ When using Redis as a destination, the system uses this struct definition:
 type RedisDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type RedisDestQueryPayload struct {
@@ -336,9 +334,9 @@ func (c *IUseConnector) GenerateOptions(param *models.RedisDestQuery) (*models.R
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -351,8 +349,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to Redis connection
-redisConn, err := CastAsRedisDBConnection(engine)
+// Cast IDatabaseConnInfo to Redis connection
+redisConn, err := CastAsRedisConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Redis connection: %v", err)
 }

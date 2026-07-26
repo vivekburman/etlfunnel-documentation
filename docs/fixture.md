@@ -34,9 +34,9 @@ func Teardown(param *models.FixtureProps) error
 
 ```go
 type FixtureProps struct {
-	SourceDBConn       models.IDatabaseEngine
-	DestDBConn         models.IDatabaseEngine
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
+	SourceDBConn       models.IDatabaseConnInfo
+	DestDBConn         models.IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
 }
 ```
 
@@ -47,13 +47,13 @@ Return `nil` to allow the flow to proceed. Return a non-nil `error` to halt exec
 ### Referenced Types
 
 ```go
-type IDatabaseEngine interface {
+type IDatabaseConnInfo interface {
 	GetName() string
-	Connect(ctx context.Context, connectionConfig IConnectionConfig) error
 	IsConnectionError(err error) bool
-	Close(ctx context.Context) error
 }
 ```
+
+`IDatabaseConnInfo` is the read-only view of a database connection handed to client-authored code. It exposes identity and error-classification only — connection lifecycle (`Connect`/`Close`) is owned exclusively by the system and is never exposed to fixtures or any other client-facing code.
 
 ## Implementation Example
 
@@ -68,7 +68,7 @@ import (
 )
 
 func Setup(param *models.FixtureProps) error {
-	conn, err := castpostgres.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture setup: connect auxdb: %w", err)
 	}
@@ -110,7 +110,7 @@ import (
 )
 
 func Teardown(param *models.FixtureProps) error {
-	conn, err := castpostgres.CastAsPostgresDBConnection(param.AuxiliaryDBConnMap["audit_db"])
+	conn, err := castpostgres.CastAsPostgresConnection(param.AuxiliaryDBConnMap["audit_db"])
 	if err != nil {
 		return fmt.Errorf("fixture teardown: connect auxdb: %w", err)
 	}

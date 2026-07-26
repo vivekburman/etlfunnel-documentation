@@ -28,13 +28,13 @@ When configuring CSV as a source, the system uses these struct definitions:
 // Source operations
 type CSVSourceScan struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type CSVSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *os.File
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type CSVSourceScanOptions struct {
@@ -141,7 +141,7 @@ When using CSV as a destination, the system uses these struct definitions:
 type CSVDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type CSVDestOptions struct {
@@ -201,10 +201,10 @@ func (c *IUseConnector) GenerateQuery(param *models.CSVDestQuery) ([]*models.CSV
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseEngine` (e.g. an auxiliary connection), use the shared generic helper directly:
+Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
 
 ```go
-// Cast IDatabaseEngine to the underlying CSV file handle
+// Cast IDatabaseConnInfo to the underlying CSV file handle
 file, err := cast.FromPointer[os.File](engine)
 if err != nil {
     return fmt.Errorf("failed to cast to CSV file handle: %v", err)

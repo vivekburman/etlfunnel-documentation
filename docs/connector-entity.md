@@ -24,6 +24,14 @@ Before diving into Connector Entities, it's important to understand the broader 
 ### 3. API Connectors
 - REST API
 
+### 4. File Connectors
+- CSV
+- JSON
+- Excel
+- Parquet
+- Avro
+- Fixed Width
+
 Each connector can function as either:
 - **Source**: Extracts data from the system
 - **Destination**: Writes data to the system

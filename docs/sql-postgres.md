@@ -33,22 +33,22 @@ When configuring PostgreSQL as a source database, the system uses these struct d
 type PostgresSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *pgx.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PostgresSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PostgresSourceNotification struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PostgresSourceWAL struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PostgresSourceQueryOptions struct {
@@ -240,7 +240,7 @@ When using PostgreSQL as a destination, the system uses these struct definitions
 type PostgresDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PostgresDestQueryPayload struct {
@@ -299,9 +299,9 @@ func (c *IUseConnector) GenerateQuery(param *models.PostgresDestQuery) ([]*model
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -314,8 +314,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to PostgreSQL connection
-pgConn, err := CastAsPostgresDBConnection(engine)
+// Cast IDatabaseConnInfo to PostgreSQL connection
+pgConn, err := CastAsPostgresConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to PostgreSQL connection: %v", err)
 }

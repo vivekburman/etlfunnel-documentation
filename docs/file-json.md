@@ -28,13 +28,13 @@ When configuring JSON as a source, the system uses these struct definitions:
 // Source operations
 type JSONSourceScan struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type JSONSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *os.File
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type JSONSourceScanOptions struct {
@@ -141,7 +141,7 @@ When using JSON as a destination, the system uses these struct definitions:
 type JSONDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type JSONDestOptions struct {
@@ -197,10 +197,10 @@ func (c *IUseConnector) GenerateQuery(param *models.JSONDestQuery) ([]*models.JS
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseEngine` (e.g. an auxiliary connection), use the shared generic helper directly:
+Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*os.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
 
 ```go
-// Cast IDatabaseEngine to the underlying JSON file handle
+// Cast IDatabaseConnInfo to the underlying JSON file handle
 file, err := cast.FromPointer[os.File](engine)
 if err != nil {
     return fmt.Errorf("failed to cast to JSON file handle: %v", err)

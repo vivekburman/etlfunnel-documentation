@@ -28,13 +28,13 @@ When configuring Avro as a source, the system uses these struct definitions:
 // Source operations
 type AvroSourceScan struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type AvroSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *ocf.Decoder
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type AvroSourceScanOptions struct {
@@ -124,7 +124,7 @@ When using Avro as a destination, the system uses these struct definitions:
 type AvroDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type AvroDestOptions struct {
@@ -209,10 +209,10 @@ func (c *IUseConnector) GenerateQuery(param *models.AvroDestQuery) ([]*models.Av
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*ocf.Decoder` from a generic `IDatabaseEngine` (e.g. an auxiliary connection), use the shared generic helper directly:
+Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*ocf.Decoder` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
 
 ```go
-// Cast IDatabaseEngine to the underlying Avro decoder
+// Cast IDatabaseConnInfo to the underlying Avro decoder
 decoder, err := cast.FromPointer[ocf.Decoder](engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Avro decoder: %v", err)

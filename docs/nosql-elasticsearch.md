@@ -29,28 +29,28 @@ When configuring Elasticsearch as a source database, the system uses these struc
 type ElasticSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *elasticsearch.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ElasticSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ElasticQueryOptions struct {
     Body          any
-    QueryType     DBElasticsearchQueryType
+    QueryType     ElasticQueryType
     Index         string
     DocumentID    string
     ScrollTimeout time.Duration // no default; passed directly as Scroll: ScrollTimeout — the zero value sends no scroll duration to the ES client
 }
 
 const (
-    ElasticsearchQueryTypeSearch   DBElasticsearchQueryType = "SEARCH"
-    ElasticsearchQueryTypeScroll   DBElasticsearchQueryType = "SCROLL"
-    ElasticsearchQueryTypeGet      DBElasticsearchQueryType = "GET"
-    ElasticsearchQueryTypeMultiGet DBElasticsearchQueryType = "MGET"
-    ElasticsearchQueryTypeSQL      DBElasticsearchQueryType = "SQL"
+    ElasticQueryTypeSearch   ElasticQueryType = "SEARCH"
+    ElasticQueryTypeScroll   ElasticQueryType = "SCROLL"
+    ElasticQueryTypeGet      ElasticQueryType = "GET"
+    ElasticQueryTypeMultiGet ElasticQueryType = "MGET"
+    ElasticQueryTypeSQL      ElasticQueryType = "SQL"
 )
 ```
 
@@ -142,7 +142,7 @@ func (c *IUseConnector) GenerateQuery(param *models.ElasticSourceQuery) (*models
     }
 
     return &models.ElasticQueryOptions{
-        QueryType:     models.ElasticsearchQueryTypeSearch,
+        QueryType:     models.ElasticQueryTypeSearch,
         Index:         param.State.GetName(),
         Body:          query,
         ScrollTimeout: time.Minute,
@@ -181,7 +181,7 @@ When using Elasticsearch as a destination, the system uses these struct definiti
 type ElasticDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ElasticDestQueryPayload struct {
@@ -190,15 +190,15 @@ type ElasticDestQueryPayload struct {
     ScriptParams map[string]any
     Index        string
     DocID        string
-    Operation    DBElasticWriteOperationType
+    Operation    ElasticWriteOperationType
     Script       string
 }
 
 const (
-    ElasticWriteIndex  DBElasticWriteOperationType = "INDEX"
-    ElasticWriteCreate DBElasticWriteOperationType = "CREATE"
-    ElasticWriteUpdate DBElasticWriteOperationType = "UPDATE"
-    ElasticWriteDelete DBElasticWriteOperationType = "DELETE"
+    ElasticWriteIndex  ElasticWriteOperationType = "INDEX"
+    ElasticWriteCreate ElasticWriteOperationType = "CREATE"
+    ElasticWriteUpdate ElasticWriteOperationType = "UPDATE"
+    ElasticWriteDelete ElasticWriteOperationType = "DELETE"
 )
 
 // ElasticDestOptions is returned by GenerateOptions and applies to the whole
@@ -259,9 +259,9 @@ func (c *IUseConnector) GenerateOptions(param *models.ElasticDestQuery) (*models
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -274,7 +274,7 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to Elasticsearch connection
+// Cast IDatabaseConnInfo to Elasticsearch connection
 elasticConn, err := CastAsElasticsearchConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Elasticsearch connection: %v", err)

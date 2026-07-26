@@ -28,7 +28,7 @@ type IClientRESTAPISource interface {
 type RESTAPISourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *http.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 // RESTAPIRawResponse carries the raw HTTP response passed to ParseFn.
@@ -203,7 +203,7 @@ This interface enables:
 type RESTAPIDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type RESTAPIDestQueryPayload struct {
@@ -245,7 +245,7 @@ func (c *IUseConnector) GenerateOptions(param *models.RESTAPIDestQuery) (*models
 ## Connection Casting
 
 ```go
-// Cast IDatabaseEngine to HTTP client
+// Cast IDatabaseConnInfo to HTTP client
 httpClient, err := CastAsRESTAPIConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to REST API connection: %v", err)

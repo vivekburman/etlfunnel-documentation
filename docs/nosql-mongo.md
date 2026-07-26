@@ -33,22 +33,22 @@ When configuring MongoDB as a source database, the system uses these struct defi
 type MongoSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *mongo.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceStreams struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceOplog struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoSourceQueryOptions struct {
@@ -227,7 +227,7 @@ When using MongoDB as a destination, the system uses this struct definition:
 type MongoDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MongoDestQueryPayload struct {
@@ -298,9 +298,9 @@ func (c *IUseConnector) GenerateOptions(param *models.MongoDestQuery) (*models.M
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety for MongoDB-specific operations.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety for MongoDB-specific operations.
 
 ### Connection Management
 
@@ -313,8 +313,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to MongoDB client
-mongoClient, err := CastAsMongoDBConnection(engine)
+// Cast IDatabaseConnInfo to MongoDB client
+mongoClient, err := CastAsMongoConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MongoDB connection: %v", err)
 }

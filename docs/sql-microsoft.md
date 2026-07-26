@@ -33,22 +33,22 @@ When configuring SQL Server as a source database, the system uses these struct d
 type MicrosoftServerSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *sql.DB
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MicrosoftServerSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MicrosoftServerSourceCDC struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MicrosoftServerSourceServiceBroker struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MicrosoftServerSourceQueryOptions struct {
@@ -56,7 +56,7 @@ type MicrosoftServerSourceQueryOptions struct {
 }
 
 type MicrosoftServerSourceCDCOptions struct {
-    ParseFn      func(MSSQLChangeEvent) (map[string]any, error)
+    ParseFn      func(MicrosoftServerChangeEvent) (map[string]any, error)
     StartTime    time.Time
     EndTime      time.Time
     FromLSN      string
@@ -68,7 +68,7 @@ type MicrosoftServerSourceCDCOptions struct {
 }
 
 type MicrosoftServerServiceBrokerOptions struct {
-    ParseFn    func(MSSQLServiceBrokerRawMessage) (map[string]any, error) // required; the source errors if nil
+    ParseFn    func(MicrosoftServerServiceBrokerRawMessage) (map[string]any, error) // required; the source errors if nil
     QueueName  string // no default — required
     SchemaName string // no default — required
     Timeout    int    // only appends a `, TIMEOUT <n>` clause when >= 0; a negative value omits the clause and waits indefinitely.
@@ -80,8 +80,8 @@ const (
     MicrosoftServerCDCTypeNetChanges MicrosoftServerCDCQueryType = "NET_CHANGES"
 )
 
-// MSSQLServiceBrokerRawMessage carries a raw message from a SQL Server Service Broker queue.
-type MSSQLServiceBrokerRawMessage struct {
+// MicrosoftServerServiceBrokerRawMessage carries a raw message from a SQL Server Service Broker queue.
+type MicrosoftServerServiceBrokerRawMessage struct {
     Body               []byte
     MessageTypeName    string
     ConversationHandle string
@@ -97,12 +97,12 @@ These structures provide:
 - **CDC ParseFn** - Controls how raw change events are shaped into pipeline records
 - **Service Broker ParseFn** - Controls how raw Service Broker messages are shaped into pipeline records
 
-### MSSQLChangeEvent
+### MicrosoftServerChangeEvent
 
-`MSSQLChangeEvent` is the typed value the engine passes to the `ParseFn` of `MicrosoftServerSourceCDCOptions`. All fields are populated by the engine before your function is called.
+`MicrosoftServerChangeEvent` is the typed value the engine passes to the `ParseFn` of `MicrosoftServerSourceCDCOptions`. All fields are populated by the engine before your function is called.
 
 ```go
-type MSSQLChangeEvent struct {
+type MicrosoftServerChangeEvent struct {
     Before    map[string]any
     After     map[string]any
     Meta      map[string]any
@@ -133,7 +133,7 @@ const (
 | `Meta` | Source-specific extras. |
 
 :::note MSSQL is the one CDC connector that still carries a `Meta` bag
-`MySQLChangeEvent`, `MariaChangeEvent`, `OracleChangeEvent`, and `PostgresChangeEvent` all expose their per-event extras as typed fields directly on the struct (e.g. `Query`/`XID`, `SCN`/`RedoSQL`, `RelationOID`) rather than a generic `map[string]any`. `MSSQLChangeEvent.Meta` is the one exception, because SQL Server's CDC `__$*` system columns are numerous and driver-specific rather than a small fixed set worth giving individual typed fields.
+`MySQLChangeEvent`, `MariaChangeEvent`, `OracleChangeEvent`, and `PostgresChangeEvent` all expose their per-event extras as typed fields directly on the struct (e.g. `Query`/`XID`, `SCN`/`RedoSQL`, `RelationOID`) rather than a generic `map[string]any`. `MicrosoftServerChangeEvent.Meta` is the one exception, because SQL Server's CDC `__$*` system columns are numerous and driver-specific rather than a small fixed set worth giving individual typed fields.
 :::
 
 ### Record Position Metadata
@@ -147,8 +147,8 @@ const (
 
 `GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from.
 
-:::note This is a different `Meta` than `MSSQLChangeEvent.Meta` above
-The `MSSQLChangeEvent.Meta` field documented above is raw `__$*` system-column input handed to your `ParseFn`. `Record.Meta` (this section) is the engine's own output, attached to the record after your `ParseFn` has already run — the two only share a name, not a value.
+:::note This is a different `Meta` than `MicrosoftServerChangeEvent.Meta` above
+The `MicrosoftServerChangeEvent.Meta` field documented above is raw `__$*` system-column input handed to your `ParseFn`. `Record.Meta` (this section) is the engine's own output, attached to the record after your `ParseFn` has already run — the two only share a name, not a value.
 :::
 
 ### Example Source
@@ -206,7 +206,7 @@ func (c *IUseConnector) GenerateCDC(param *models.MicrosoftServerSourceCDC) (*mo
         UseMinMaxLSN: true,
         QueryType:    models.MicrosoftServerCDCTypeAllChanges,
         InstanceName: fmt.Sprintf("dbo_%s", param.State.GetName()),
-        ParseFn: func(event models.MSSQLChangeEvent) (map[string]any, error) {
+        ParseFn: func(event models.MicrosoftServerChangeEvent) (map[string]any, error) {
             record := event.After
             if record == nil {
                 record = event.Before
@@ -223,7 +223,7 @@ func (c *IUseConnector) GenerateServiceBroker(param *models.MicrosoftServerSourc
         QueueName:  param.State.GetName() + "_queue",
         SchemaName: "dbo",
         Timeout:    30000, // 30 seconds; use a negative value instead to wait indefinitely
-        ParseFn: func(msg models.MSSQLServiceBrokerRawMessage) (map[string]any, error) {
+        ParseFn: func(msg models.MicrosoftServerServiceBrokerRawMessage) (map[string]any, error) {
             return map[string]any{
                 "body":         string(msg.Body),
                 "message_type": msg.MessageTypeName,
@@ -264,7 +264,7 @@ When using SQL Server as a destination, the system uses this struct definition:
 type MicrosoftServerDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MicrosoftServerDestQueryPayload struct {
@@ -317,9 +317,9 @@ func (c *IUseConnector) GenerateQuery(param *models.MicrosoftServerDestQuery) ([
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -332,8 +332,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to SQL Server connection
-sqlServerConn, err := CastAsMicrosoftServerDBConnection(engine)
+// Cast IDatabaseConnInfo to SQL Server connection
+sqlServerConn, err := CastAsMicrosoftServerConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to SQL Server connection: %v", err)
 }

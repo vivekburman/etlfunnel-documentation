@@ -39,9 +39,9 @@ Flow and pipeline orchestration use separate types. Each item exposes the databa
 // Flow-level types
 type FlowOrchestratorItemProps struct {
 	Name               string
-	SourceDBConn       IDatabaseEngine
-	DestDBConn         IDatabaseEngine
-	AuxiliaryDBConnMap map[string]IDatabaseEngine
+	SourceDBConn       IDatabaseConnInfo
+	DestDBConn         IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type FlowOrchestratorProps struct {
@@ -58,9 +58,9 @@ type FlowOrchestratorTune struct {
 type PipelineOrchestratorItemProps struct {
 	Name               string
 	EntityBaseName     string
-	SourceDBConn       IDatabaseEngine
-	DestDBConn         IDatabaseEngine
-	AuxiliaryDBConnMap map[string]IDatabaseEngine
+	SourceDBConn       IDatabaseConnInfo
+	DestDBConn         IDatabaseConnInfo
+	AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type PipelineOrchestratorProps struct {

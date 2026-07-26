@@ -31,17 +31,17 @@ When configuring MySQL as a source database, the system uses these struct defini
 type MySQLSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *client.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MySQLSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MySQLSourceBinlog struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MySQLSourceQueryOptions struct {
@@ -190,7 +190,7 @@ When using MySQL as a destination, the system uses this struct definition:
 type MySQLDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MySQLDestQueryPayload struct {
@@ -242,9 +242,9 @@ func (c *IUseConnector) GenerateQuery(param *models.MySQLDestQuery) ([]*models.M
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -257,8 +257,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to MySQL connection
-mysqlConn, err := CastAsMySQLDBConnection(engine)
+// Cast IDatabaseConnInfo to MySQL connection
+mysqlConn, err := CastAsMySQLConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MySQL connection: %v", err)
 }

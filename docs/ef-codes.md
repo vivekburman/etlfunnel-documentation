@@ -81,6 +81,15 @@ The logger returned is already scoped to the current pipeline/flow — you don't
 
 Why it matters: this is the single most useful signal for "is my pipeline healthy right now" — `EF-M001` without a matching `EF-M002`/`003`/`004` for longer than expected usually means a pipeline is hung, not just slow.
 
+### Flow Lifecycle
+
+| Code           | `msg`               | `event`         | Description                                             |
+| -------------- | ------------------- | --------------- | -------------------------------------------------------- |
+| `EF-M020`      | `pipeline event`    | `flow_started`  | Flow has started execution. *Reserved — not yet emitted.* |
+| `EF-M021`      | `pipeline event`    | `flow_stopped`  | Flow has completed or been cancelled. *Reserved — not yet emitted.* |
+
+These sit one level above the per-pipeline `EF-M00x` codes above — a flow can contain multiple pipelines — but are not yet wired into the emitter.
+
 ### Pipeline Stats
 
 | Code           | `msg`            | Description                                                           |
@@ -192,6 +201,8 @@ Note the flow/pipeline split: `EF-E301`–`EF-E303` fire during [flow-level orch
 | `EF-E514`      | Failed to get executable path                              |
 | `EF-E515`      | Failed to read collection definition from either directory |
 | `EF-E516`      | Failed to find shutdown file path                          |
+| `EF-E517`      | Invalid `--decryption-key` argument                         |
+| `EF-E518`      | Decryption key was provided but failed to decrypt connection params; unrecoverable, process exits |
 | `EF-E520`      | Flow fixture failed                                        |
 | `EF-E530`      | Uncaught panic                                             |
 | `EF-E540`      | Graceful shutdown timed out                                |

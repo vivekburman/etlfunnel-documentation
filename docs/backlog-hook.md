@@ -1,10 +1,10 @@
 # Incident Backlog
 
-Backlog hooks are triggered when write operations to the destination fail, providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
+Backlog hooks are triggered when a record fails during the pipeline — either during transformation or during the destination write — providing a critical safety net for handling failed records. These hooks enable incident management and failure tracking to ensure data integrity and pipeline reliability.
 
 ## Overview
 
-While checkpoint hooks handle successful commits, backlog hooks are invoked when data writes fail. This complementary mechanism allows you to:
+While checkpoint hooks handle successful commits, backlog hooks are invoked when a record fails, whether that failure happened during transformation (`FailureStageTransform`) or during the destination write (`FailureStageDestination`). This complementary mechanism allows you to:
 
 - Store failed records for later processing
 - Maintain data integrity during system outages
@@ -22,7 +22,7 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error)
 ```go
 type BacklogProps struct {
 	State              models.IPipelineRuntimeState
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
 	Records            []*models.Record
 	FailureStage       models.FailureStage
 	Err                error
@@ -86,7 +86,7 @@ import (
 )
 
 func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
-	mysqlConn, err := castmysql.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
+	mysqlConn, err := castmysql.CastAsMySQLConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
 		return nil, err
 	}

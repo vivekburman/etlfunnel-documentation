@@ -23,7 +23,7 @@ func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error)
 ```go
 type CheckpointProps struct {
 	State              models.IPipelineRuntimeState
-	AuxiliaryDBConnMap map[string]models.IDatabaseEngine
+	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
 	Records            []*models.Record
 }
 ```
@@ -79,7 +79,7 @@ import (
 )
 
 func Checkpoint(param *models.CheckpointProps) (*models.CheckpointTune, error) {
-	mysqlConn, err := castmysql.CastAsMySQLDBConnection(param.AuxiliaryDBConnMap["mysql"])
+	mysqlConn, err := castmysql.CastAsMySQLConnection(param.AuxiliaryDBConnMap["mysql"])
 	if err != nil {
 		return nil, err
 	}

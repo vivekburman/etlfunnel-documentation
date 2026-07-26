@@ -30,7 +30,7 @@ The `TransformerProps` struct provides access to:
 type TransformerProps struct {
 	State              IPipelineRuntimeState
 	Record             *models.Record
-	AuxiliaryDBConnMap map[string]IDatabaseEngine
+	AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 ```
 

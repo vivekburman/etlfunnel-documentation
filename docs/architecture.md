@@ -19,7 +19,7 @@ The Data Plane is everything that runs **per record**, on every piece of data th
 These define *how* data is read from a source and written to a destination. A source connector entity streams records into the pipeline one at a time (or in batches via channels). A destination connector entity generates the write operation for each incoming record. They sit at both ends of the data path.
 
 **Transformer**  
-Receives a `map[string]any` record, applies your business logic — field remapping, enrichment, validation, filtering — and returns the mutated record. Transformers chain sequentially; the output of one becomes the input of the next. Returning `nil` skips the record entirely.
+Receives a `*models.TransformerProps` whose `Record` field wraps the record as `Data map[string]any` plus `Meta map[string]any` (engine-internal position/cursor bookkeeping, e.g. CDC resume state). Applies your business logic — field remapping, enrichment, validation, filtering — against `Record.Data` and returns a `*models.Record`. Transformers chain sequentially; the output of one becomes the input of the next. Returning `nil` skips the record entirely. Always carry `Meta` forward on the record you return (e.g. `&models.Record{Data: out, Meta: param.Record.Meta}`) — dropping it discards any resume/cursor state the source attached.
 
 **Checkpoint**  
 Fires automatically every time the pipeline successfully commits data to the destination, whether in bulk or individually. Used to track progress, maintain audit logs, and enable restart-from-position on failure. It is triggered *after* a successful write.

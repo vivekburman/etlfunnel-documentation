@@ -31,17 +31,17 @@ When configuring MariaDB as a source database, the system uses these struct defi
 type MariaSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *client.Conn
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaSourceBinlog struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaSourceQueryOptions struct {
@@ -194,7 +194,7 @@ When using MariaDB as a destination, the system uses this struct definition:
 type MariaDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type MariaDestQueryPayload struct {
@@ -246,9 +246,9 @@ func (c *IUseConnector) GenerateQuery(param *models.MariaDestQuery) ([]*models.M
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -261,8 +261,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to MariaDB connection
-mariaConn, err := CastAsMariaDBConnection(engine)
+// Cast IDatabaseConnInfo to MariaDB connection
+mariaConn, err := CastAsMariaConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to MariaDB connection: %v", err)
 }

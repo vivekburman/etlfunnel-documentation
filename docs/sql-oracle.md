@@ -31,17 +31,17 @@ When configuring Oracle as a source database, the system uses these struct defin
 type OracleSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *sql.DB
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleSourceCDC struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleSourceQueryOptions struct {
@@ -259,7 +259,7 @@ When using Oracle as a destination, the system uses this struct definition:
 type OracleDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type OracleDestQueryPayload struct {
@@ -315,9 +315,9 @@ func (c *IUseConnector) GenerateQuery(param *models.OracleDestQuery) ([]*models.
 
 ## Database Connection Casting
 
-### IDatabaseEngine Interface
+### IDatabaseConnInfo Interface
 
-The `IDatabaseEngine` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
+The `IDatabaseConnInfo` interface provides a unified abstraction layer for database connections, enabling seamless integration across different database types while maintaining type safety.
 
 ### Connection Management
 
@@ -330,8 +330,8 @@ The system includes built-in functionality to cast generic database engine inter
 #### Connection Casting Example
 
 ```go
-// Cast IDatabaseEngine to Oracle connection
-oracleConn, err := CastAsOracleDBConnection(engine)
+// Cast IDatabaseConnInfo to Oracle connection
+oracleConn, err := CastAsOracleConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Oracle connection: %v", err)
 }

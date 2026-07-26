@@ -28,13 +28,13 @@ When configuring Parquet as a source, the system uses these struct definitions:
 // Source operations
 type ParquetSourceScan struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ParquetSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *parquet.File
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ParquetSourceScanOptions struct {
@@ -130,7 +130,7 @@ When using Parquet as a destination, the system uses these struct definitions:
 type ParquetDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type ParquetDestOptions struct {
@@ -206,10 +206,10 @@ func (c *IUseConnector) GenerateQuery(param *models.ParquetDestQuery) ([]*models
 
 ## Connection Casting
 
-Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*parquet.File` from a generic `IDatabaseEngine` (e.g. an auxiliary connection), use the shared generic helper directly:
+Unlike database connectors, file connectors have no dedicated per-connector cast helper in `cast/`. When you need the underlying `*parquet.File` from a generic `IDatabaseConnInfo` (e.g. an auxiliary connection), use the shared generic helper directly:
 
 ```go
-// Cast IDatabaseEngine to the underlying Parquet file handle
+// Cast IDatabaseConnInfo to the underlying Parquet file handle
 file, err := cast.FromPointer[parquet.File](engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Parquet file handle: %v", err)

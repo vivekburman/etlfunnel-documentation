@@ -25,18 +25,18 @@ type IClientDBKafkaSource interface {
 ```go
 type KafkaSourceSubscribe struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type KafkaSourceAssign struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type KafkaSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       sarama.Client
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type KafkaSourceSubscriptionOptions struct {
@@ -181,7 +181,7 @@ There is no per-payload `Partition` field — every message is sent through sara
 type KafkaDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type KafkaDestQueryPayload struct {
@@ -248,7 +248,7 @@ func (c *IUseConnector) GenerateOptions(param *models.KafkaDestQuery) (*models.K
 ## Connection Casting
 
 ```go
-// Cast IDatabaseEngine to Kafka sarama.Client
+// Cast IDatabaseConnInfo to Kafka sarama.Client
 kafkaClient, err := CastAsKafkaConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Kafka connection: %v", err)

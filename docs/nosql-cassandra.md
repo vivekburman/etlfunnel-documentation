@@ -23,13 +23,13 @@ type IClientDBCassandraSource interface {
 ```go
 type CassandraSourceQuery struct {
     State              IPipelineRuntimeState
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 type CassandraSourceFetch struct {
     State              IPipelineRuntimeState
     SourceDBConn       *gocql.Session
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 // CassandraSourceQueryOptions describes a CQL SELECT to execute against Cassandra.
@@ -131,7 +131,7 @@ This interface enables:
 type CassandraDestQuery struct {
     State              IPipelineRuntimeState
     Records            []*models.Record
-    AuxiliaryDBConnMap map[string]IDatabaseEngine
+    AuxiliaryDBConnMap map[string]IDatabaseConnInfo
 }
 
 // CassandraDestQueryPayload describes a single CQL write statement.
@@ -245,7 +245,7 @@ func (c *IUseConnector) GenerateQuery(param *models.CassandraDestQuery) ([]*mode
 ## Connection Casting
 
 ```go
-// Cast IDatabaseEngine to Cassandra session
+// Cast IDatabaseConnInfo to Cassandra session
 cassandraSession, err := CastAsCassandraConnection(engine)
 if err != nil {
     return fmt.Errorf("failed to cast to Cassandra connection: %v", err)
