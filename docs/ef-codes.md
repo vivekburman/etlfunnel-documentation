@@ -8,6 +8,7 @@ Codes follow one format: **`EF-{category}{number}`**
 | -------------- | ------------------------- |
 | `M`            | Metric / lifecycle events |
 | `E`            | Error events              |
+| `R`            | Runner service events     |
 
 The two streams are deliberately separate, and it's worth understanding why before you start querying either one.
 
@@ -106,8 +107,14 @@ This is what feeds the "Live" gauges (Total Rows Read, Transform Failures, etc.)
 | -------------- | ---------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
 | `EF-M030`      | `pipeline event` | `terminate_rule_triggered` | A termination rule evaluated to true and stopped the pipeline.                                |
 | `EF-M031`      | `pipeline event` | `dest_rule_change`         | Destination write rule changed mid-run (e.g. batch size tuned). *Reserved — not yet emitted.* |
+| `EF-M032`      | `pipeline event` | `backlog_triggered`        | A [backlog hook](backlog-hook.md) returned `ActionContinue`, so the failed batch was queued to the backlog instead of stopping the pipeline. |
+| `EF-M033`      | `pipeline event` | `checkpoint_triggered`     | A [checkpoint hook](checkpoint-hook.md) ran. Rate-limited to at most once per configured interval — not emitted on every checkpoint call. |
 
 **Fields on `EF-M030`:** `rule`, `reason`
+
+**Fields on `EF-M032`:** `backlog_action` (the failure stage that triggered the backlog write)
+
+**Fields on `EF-M033`:** `checkpoint` (`continue` \| `stop`)
 
 If you're authoring a [termination rule](termination-rule-hook.md) and want to know which of your rules is actually firing in production, this is the code to filter `metric.log` on — the `rule` field carries the rule name you defined, not a generic identifier.
 
@@ -206,7 +213,7 @@ Note the flow/pipeline split: `EF-E301`–`EF-E303` fire during [flow-level orch
 | `EF-E520`      | Flow fixture failed                                        |
 | `EF-E530`      | Uncaught panic                                             |
 | `EF-E540`      | Graceful shutdown timed out                                |
-| `EF-E550`      | Retry queue is full, pipeline dropped                      |
+| `EF-E550`      | *Unused.* Previously "retry queue is full, pipeline dropped" — queues are unbounded now, so nothing is dropped. Reserved for future reassignment; don't expect to see it in logs. |
 | `EF-E551`      | Flow queue is full, flow dropped                           |
 | `EF-E560`      | Pipeline exceeded max retries                              |
 
@@ -291,3 +298,139 @@ Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-fami
 | `EF-E708`      | Maria     | Write/execute error      |
 | `EF-E709`      | MSSQL     | Commit/transaction error |
 | `EF-E710`      | MSSQL     | Write/execute error      |
+
+---
+
+## EF-R: Runner Service Events
+
+`EF-R` codes are written by the **runner service** — the process that polls for jobs,
+compiles and launches the per-job execution-engine binaries, and syncs status/logs back to
+the control-plane server. They appear in the runner service's own `service.log`, a
+separate stream from `run.log`/`metric.log`, which belong to the per-job execution-engine
+process. Like `EF-E`, an `EF-R` code marks a significant `Error`/`Warn`/`Fatal` line worth
+filtering or alerting on; plain `Info`/`Debug` lines in `service.log` don't carry a code.
+
+### EF-R1xx — Job process lifecycle & orchestration
+
+| Code       | `message`                                                | Emitted from                                    |
+| ---------- | --------------------------------------------------------- | ------------------------------------------------ |
+| `EF-R101`  | Failed to create run log directory for build failure       | writing a codegen/compile failure to run.log     |
+| `EF-R102`  | Failed to write build failure to run log                   | writing a codegen/compile failure to run.log     |
+| `EF-R103`  | Failed to read lock file for jobID                         | updating a job's lock file with its process PID  |
+| `EF-R104`  | Lock file for jobID was not valid JSON, overwriting *(Warn)* | updating a job's lock file with its process PID |
+| `EF-R105`  | Failed to convert lock file details for jobID to string     | updating a job's lock file with its process PID  |
+| `EF-R106`  | Failed to write processPID to lock file for jobID           | updating a job's lock file with its process PID  |
+| `EF-R107`  | Failed to create shutdown file                             | aborting a job                                   |
+| `EF-R108`  | failed to remove .abort file for job                       | aborting a job                                   |
+| `EF-R109`  | Failed to remove folder                                    | clearing a job's artifacts after retries         |
+| `EF-R111`  | Failed to read lock file details                            | clearing job artifacts                           |
+| `EF-R112`  | Failed to push build failure log, will retry                | clearing artifacts for a job that failed to build |
+| `EF-R113`  | Failed to create mark completed file for failed job         | clearing artifacts for a job that failed to build |
+| `EF-R114`  | Failed to push final job log, will retry                    | clearing artifacts for a finished job            |
+| `EF-R115`  | Failed to push final metric log, will retry                 | clearing artifacts for a finished job            |
+| `EF-R116`  | Failed to mark job complete on server, will retry            | clearing artifacts for a finished job            |
+| `EF-R117`  | Failed to create mark completed file                         | clearing artifacts for a finished job            |
+| `EF-R118`  | Failed to check if file lock exists                          | picking up a new job to run                      |
+| `EF-R119`  | Failed to read job definition JSON while picking job          | picking up a new job to run (reading its definition) |
+| `EF-R120`  | Failed to create runtime code                                | picking up a new job to run (codegen)            |
+| `EF-R121`  | Failed to compile code                                       | picking up a new job to run (compile)            |
+| `EF-R122`  | Failed to fetch decryption key                                | picking up a new job to run                      |
+| `EF-R123`  | Failed to shutdown process even after 60 sec wait *(Warn)*    | aborting a job                                   |
+| `EF-R124`  | Failed to read lock file *(Warn)*                             | clearing job artifacts                           |
+| `EF-R125`  | Error finding abort files                                     | identifying jobs marked to abort (used when aborting jobs and when picking up a new job) |
+| `EF-R126`  | Error finding uploaded log files for run directory             | clearing artifacts for a completed job (checking its rollover logs are fully uploaded first) |
+| `EF-R127`  | Error finding log files in run directory                        | clearing artifacts for a completed job (checking its rollover logs are fully uploaded first) |
+| `EF-R128`  | Failed to read runs folder path                                  | clearing job artifacts                          |
+| `EF-R129`  | Failed to read runs folder path                                   | picking up a new job to run                    |
+
+### EF-R2xx — Control-plane HTTP sync
+
+| Code       | `message`                                     | Emitted from                                          |
+| ---------- | ----------------------------------------------- | -------------------------------------------------------- |
+| `EF-R201`  | Failed to get runner process details             | reporting runner process stats to the server             |
+| `EF-R202`  | Failed to convert RunJobProcessStatsData to string | reporting runner process stats to the server            |
+| `EF-R203`  | Failed to create request for job status          | reporting runner process stats to the server              |
+| `EF-R204`  | Failed to send request for job process stats      | reporting runner process stats to the server             |
+| `EF-R205`  | Server returned non-OK status                    | reporting runner process stats to the server              |
+| `EF-R206`  | Failed to create request for registering runner    | registering the runner with the server                  |
+| `EF-R207`  | Failed to send request for registering runner       | registering the runner with the server                 |
+| `EF-R208`  | Server error response                              | registering the runner with the server                 |
+| `EF-R209`  | Failed to convert TriggerJobPojo to string          | updating job trigger status on the server               |
+| `EF-R210`  | Failed to create request for job trigger status      | updating job trigger status on the server              |
+| `EF-R211`  | Failed to send request for job status                | updating job trigger status on the server              |
+| `EF-R212`  | Server returned non-OK status                         | updating job trigger status on the server             |
+| `EF-R213`  | Failed to convert TriggerJobPojo to string             | marking a job complete on the server                  |
+| `EF-R214`  | Error getting job json info for jobID                   | marking a job complete on the server                  |
+| `EF-R215`  | Failed to create request for job end status             | marking a job complete on the server                 |
+| `EF-R216`  | Failed to send request for job status                   | marking a job complete on the server                 |
+| `EF-R217`  | Server returned non-OK status                             | marking a job complete on the server                |
+| `EF-R218`  | Failed to create abort job file                           | marking a job deleted (404 from server)             |
+| `EF-R219`  | Error getting job json info for jobID                      | updating a job's run status on the server           |
+| `EF-R220`  | Failed to create request for job status                    | updating a job's run status on the server           |
+| `EF-R221`  | Failed to send request for job status                       | updating a job's run status on the server          |
+| `EF-R222`  | Server returned non-OK status                                | updating a job's run status on the server        |
+| `EF-R223`  | Error getting job json info for jobID                          | acknowledging a job pick with the server         |
+| `EF-R224`  | Failed to create request for job ack                           | acknowledging a job pick with the server         |
+| `EF-R225`  | Failed to send request for job ack                              | acknowledging a job pick with the server        |
+| `EF-R226`  | Server returned non-OK status                                     | acknowledging a job pick with the server      |
+| `EF-R227`  | Failed to create request to get new jobs                           | polling the server for new jobs               |
+| `EF-R228`  | Failed to send request to get new jobs                               | polling the server for new jobs             |
+| `EF-R229`  | Server returned non-OK status                                          | polling the server for new jobs           |
+| `EF-R230`  | error creating temp file                                                | downloading the new-jobs archive          |
+| `EF-R231`  | error deleting temp file                                                 | downloading the new-jobs archive         |
+| `EF-R232`  | error saving zip file                                                     | downloading the new-jobs archive       |
+| `EF-R233`  | error extracting temp zip                                                  | downloading the new-jobs archive      |
+| `EF-R234`  | Failed to create request to get new jobs                                    | polling the server for aborted jobs   |
+| `EF-R235`  | Failed to send request to get new jobs                                       | polling the server for aborted jobs  |
+| `EF-R236`  | Server returned non-OK status                                                  | polling the server for aborted jobs |
+| `EF-R237`  | Failed to read response body                                                    | polling the server for aborted jobs |
+| `EF-R238`  | Failed to parse abort job pojo                                                    | polling the server for aborted jobs |
+| `EF-R239`  | Failed to create abort job file                                                    | polling the server for aborted jobs |
+
+### EF-R3xx — Log & metric rollover upload
+
+| Code       | `message`                                             | Emitted from                                             |
+| ---------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `EF-R301`  | Error opening log file for jobID                           | pushing incremental run-log content to the server           |
+| `EF-R302`  | Error getting file identity for jobID                        | pushing incremental run-log content to the server          |
+| `EF-R303`  | Error getting log file info for jobID                          | pushing incremental run-log content to the server         |
+| `EF-R304`  | Error seeking log file for jobID                                 | pushing incremental run-log content to the server        |
+| `EF-R305`  | Error getting job json info for jobID                              | pushing incremental run-log content to the server       |
+| `EF-R306`  | Error reading log file for jobID                                     | pushing incremental run-log content to the server      |
+| `EF-R307`  | Failed to marshal JSON payload for job log                             | pushing incremental run-log content to the server     |
+| `EF-R308`  | Failed to create request for job log                                     | pushing incremental run-log content to the server    |
+| `EF-R309`  | Failed to send request for job log                                         | pushing incremental run-log content to the server   |
+| `EF-R310`  | Failed to save log file state for job                                        | pushing incremental run-log content to the server  |
+| `EF-R311`  | Server returned non-OK status for job log                                      | pushing incremental run-log content to the server |
+| `EF-R312`  | Failed to read lock file for jobID *(Warn)*                                     | listing active jobs for the stats scheduler      |
+| `EF-R313`  | Failed to read lock file details for jobID                                       | listing active jobs for the stats scheduler     |
+| `EF-R314`  | Error getting job json info for jobID                                              | pushing rollover run logs to the server       |
+| `EF-R315`  | Failed to upload rollover log file                                                   | pushing rollover run logs to the server     |
+| `EF-R316`  | Failed to create marker file                                                           | pushing rollover run logs to the server   |
+| `EF-R317`  | Error getting job json info for jobID                                                    | detecting rotated metric logs |
+| `EF-R318`  | Failed to bootstrap metric tracker                                                          | detecting rotated metric logs |
+| `EF-R319`  | Failed to detect metric file rotation                                                        | detecting rotated metric logs |
+| `EF-R320`  | Failed to read runs folder path                                                                | listing active jobs for the stats scheduler |
+| `EF-R321`  | Failed to read job definition, skipping this tick *(Warn)*                                       | tailing a job's live metric fold |
+| `EF-R322`  | failed to remove rotated metric log after successful upload *(Warn)*                             | uploading a rotated metric-log zip to the server |
+| `EF-R323`  | Failed to start metric pipeline                                                                    | tailing a job's live metric fold |
+| `EF-R324`  | Failed to start live metric tracking                                                                | tailing a job's live metric fold |
+| `EF-R325`  | Failed to tail active metric log                                                                     | tailing a job's live metric fold |
+| `EF-R326`  | Error finding run directories                                                                          | pushing rollover run logs to the server |
+| `EF-R327`  | Error finding uploaded log files for run directory                                                       | pushing rollover run logs to the server |
+| `EF-R328`  | Error finding log files in run directory                                                                  | pushing rollover run logs to the server |
+| `EF-R329`  | Failed to remove rollover log file after successful upload *(Warn)*                                         | pushing rollover run logs to the server |
+| `EF-R330`  | Error finding run directories                                                                                 | detecting rotated metric logs |
+| `EF-R331`  | Error finding metric log files in run directory                                                                 | detecting rotated metric logs |
+| `EF-R332`  | Rotated metric log missing on recovery, generation is unrecoverable                                                | uploading a rotated metric-log zip to the server |
+| `EF-R333`  | Failed to upload rotation, will retry on the next observation pass                                                   | uploading a rotated metric-log zip to the server |
+| `EF-R334`  | Job removed with uploads still pending *(Warn)*                                                                        | removing a completed job from the metric manager (flush timeout) |
+| `EF-R335`  | Failed to read tracker while checking pending uploads, treating as pending *(Warn)*                                       | checking whether a job has pending rotated-metric uploads |
+| `EF-R336`  | Failed to persist active generation                                                                                          | recording the active metric-log generation in the tracker file |
+| `EF-R337`  | Failed to persist unrecoverable generation                                                                                     | marking a metric-log generation unrecoverable in the tracker file |
+
+### EF-R5xx — System / startup
+
+| Code       | `message`                    | Emitted from                     |
+| ---------- | ------------------------------- | ------------------------------------ |
+| `EF-R501`  | Failed to start HTTP server *(Fatal)* | runner service startup, binding its API port |
