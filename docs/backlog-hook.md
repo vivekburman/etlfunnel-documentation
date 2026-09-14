@@ -25,9 +25,10 @@ type BacklogProps struct {
 	AuxiliaryDBConnMap map[string]models.IDatabaseConnInfo
 	Records            []*models.Record
 	FailureStage       models.FailureStage
-	Err                error
 }
 ```
+
+The failure reason for each record is not on `BacklogProps` — it's on the record itself, via `Record.OutcomeError` (see below), since a single backlog batch can contain records that failed for different reasons.
 
 ### Return Value
 
@@ -55,10 +56,24 @@ const (
 	FailureStageDestination
 )
 
+// String returns "transform", "destination", or "none".
+func (fs FailureStage) String() string
+
 type Record struct {
-	Data map[string]any // User-facing data that goes through transformations
-	Meta map[string]any // Internal metadata preserved throughout pipeline
+	Data          map[string]any     // User-facing data that goes through transformations
+	Meta          map[string]any     // Internal metadata preserved throughout pipeline
+	OutcomeError  error              // Set by the framework once this record exits the transform or destination stage; nil until then
+	OutcomeStatus RecordResultStatus // Set by the framework alongside OutcomeError; RecordResultUnset (zero value) until then
 }
+
+type RecordResultStatus int
+
+const (
+	RecordResultUnset RecordResultStatus = iota // zero value — no outcome recorded yet
+	RecordResultCommitted
+	RecordResultFailed
+	RecordResultNotAttempted // batch aborted before this row was reached
+)
 
 type IPipelineRuntimeState interface {
 	GetName() string
@@ -93,18 +108,25 @@ func Backlog(param *models.BacklogProps) (*models.BacklogTune, error) {
 
 	query := `
 		INSERT INTO failed_records
-		(pipeline_name, record_id, record_data, failure_timestamp, retry_count, status)
-		VALUES (?, ?, ?, ?, 0, 'pending')
+		(pipeline_name, record_id, record_data, failure_stage, error_message, failure_timestamp, retry_count, status)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 'pending')
 	`
 
 	for _, record := range param.Records {
 		recordJSON, _ := json.Marshal(record.Data)
 		recordID := fmt.Sprintf("%v", record.Data["id"])
 
+		errMsg := ""
+		if record.OutcomeError != nil {
+			errMsg = record.OutcomeError.Error()
+		}
+
 		_, err := mysqlConn.Client.Exec(query,
 			param.State.GetName(),
 			recordID,
 			string(recordJSON),
+			param.FailureStage.String(),
+			errMsg,
 			time.Now().UTC(),
 		)
 		if err != nil {

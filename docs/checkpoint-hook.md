@@ -47,9 +47,20 @@ const (
 )
 
 type Record struct {
-	Data map[string]any // User-facing data that goes through transformations
-	Meta map[string]any // Internal metadata preserved throughout pipeline
+	Data          map[string]any     // User-facing data that goes through transformations
+	Meta          map[string]any     // Internal metadata preserved throughout pipeline
+	OutcomeError  error              // Set by the framework once this record exits the transform or destination stage; nil until then
+	OutcomeStatus RecordResultStatus // Set by the framework alongside OutcomeError; RecordResultUnset (zero value) until then
 }
+
+type RecordResultStatus int
+
+const (
+	RecordResultUnset RecordResultStatus = iota // zero value — no outcome recorded yet
+	RecordResultCommitted
+	RecordResultFailed
+	RecordResultNotAttempted // batch aborted before this row was reached
+)
 
 type IPipelineRuntimeState interface {
 	GetName() string
@@ -59,6 +70,8 @@ type IPipelineRuntimeState interface {
 	GetDestinationWriteBatchSize() int
 }
 ```
+
+Records passed to `Checkpoint` have already committed, so `OutcomeStatus` is `RecordResultCommitted` and `OutcomeError` is `nil` for every record in `param.Records`.
 
 ## Benefits of Using Checkpoints
 
