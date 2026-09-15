@@ -38,10 +38,14 @@ type TransformerProps struct {
 
 ```go
 type Record struct {
-	Data map[string]any // User-facing data that goes through transformations
-	Meta map[string]any // Internal metadata preserved throughout the pipeline
+	Data          map[string]any     // User-facing data that goes through transformations
+	Meta          map[string]any     // Internal metadata preserved throughout the pipeline
+	OutcomeError  error              // Set by the framework after transform/destination; always nil here
+	OutcomeStatus RecordResultStatus // Set by the framework after transform/destination; always RecordResultUnset here
 }
 ```
+
+`OutcomeError` and `OutcomeStatus` are populated by the framework only after a record leaves the transform stage (see the [checkpoint](checkpoint-hook.md) and [backlog](backlog-hook.md) hooks) — never read or write them from a transformer.
 
 `IPipelineRuntimeState` is a restricted, safe view of the running pipeline exposed to callbacks. It provides observable properties and controlled write operations:
 
