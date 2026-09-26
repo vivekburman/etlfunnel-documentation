@@ -279,8 +279,12 @@ Codes here are per-connector, per-*category*, not per log line — every connect
 | `EF-E652`      | REST API      | Request-execute error                     |
 | `EF-E653`      | REST API      | Extract/decode error                      |
 | `EF-E654`      | REST API      | Webhook server error *(Warn on shutdown)* |
+| `EF-E660`      | Snowflake     | Read/query error                          |
+| `EF-E661`      | Snowflake     | Stream read error                         |
 
-For the connectors documented under [Code Reference](sql-mysql.md), this is the range to watch alongside the connector's own docs: a `ParseFn` you author (e.g. on `MySQLSourceBinlogOptions`, `RedisSourceKeysOptions`) returning an error surfaces here under that connector's "read/decode" code, not under `EF-E401` — parsing errors during capture are distinct from transform errors, even though both come from client-authored functions.
+For the connectors documented under [Code Reference](sql-mysql.md), this is the range to watch alongside the connector's own docs: a `ParseFn` you author (e.g. on `MySQLSourceBinlogOptions`, `RedisSourceKeysOptions`) returning an error surfaces here under that connector's "read/decode" code, not under `EF-E401` — parsing errors during capture are distinct from transform errors, even though both come from client-authored functions. `EF-E661` also covers `ReadByStream`'s transaction lifecycle for [Snowflake](dw-snowflake.md) — a failed consume-and-commit or rollback logs here, not under `EF-E7xx`.
+
+The numbering here isn't contiguous — codes for BigQuery, Redshift, S3, and GCS exist in the engine (`EF-E655`–`EF-E659`, `EF-E662`–`EF-E663`) but those connectors aren't documented yet, so their codes are omitted from this table for now.
 
 ### EF-E7xx — Destination connector errors
 
@@ -298,6 +302,10 @@ Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-fami
 | `EF-E708`      | Maria     | Write/execute error      |
 | `EF-E709`      | MSSQL     | Commit/transaction error |
 | `EF-E710`      | MSSQL     | Write/execute error      |
+| `EF-E713`      | Snowflake | Commit/transaction error |
+| `EF-E714`      | Snowflake | Write/execute error      |
+
+Same gap as above: `EF-E711`/`EF-E712` (Redshift) and the BigQuery/S3/GCS write-error codes exist in the engine but aren't listed here until those connectors get their own doc page.
 
 ---
 

@@ -34,6 +34,9 @@ The Connector Hub allows you to configure and manage connections to various data
 - Avro
 - Fixed Width
 
+### Data Warehouse
+- Snowflake
+
 ## Database Connectors
 
 ## Relational DB Connectors
@@ -370,6 +373,37 @@ File connectors (CSV, JSON, Excel, Parquet, Avro, Fixed Width) read from and wri
 - **By Write Operation**: Use as a destination, writing records into files under the configured directory
 
 Each file type has its own set of source-scan and destination-write options (delimiter/header handling for CSV, sheet name for Excel, schema for Parquet/Avro, field positions for Fixed Width, etc.) — see the dedicated page for each file connector for the full option set.
+
+## Data Warehouse Connectors
+
+### Snowflake Connector
+
+Snowflake connector provides integration with Snowflake's cloud data warehouse, supporting one-shot queries and Snowflake Streams for change tracking as a source, and transactional batched writes as a destination.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Account | Text | - | Snowflake account identifier |
+| Username | Text | - | Snowflake username for authentication |
+| Database | Text | - | Target database name |
+| Schema | Text | - | Target schema name |
+| Warehouse | Text | - | Virtual warehouse to run queries on |
+| Role | Text | - | Role to assume for the session |
+| Password | Password | - | Password (used when Private Key and OAuth Token are both unset) |
+| Private Key | Text | - | Base64-encoded PKCS8 RSA private key, for key-pair (JWT) authentication |
+| OAuth Token | Text | - | OAuth access token |
+| Data Processing Strategy | Dropdown | By Query | Method for capturing data changes |
+
+**Data Processing Strategies:**
+- **By Query**: Standard SQL query-based data extraction
+- **By Stream**: Read from a Snowflake Stream; the stream's offset only advances once destination writes are confirmed
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping)
+- **By Write Operation**: Use as destination database with query generation for data insertion
+
+:::note
+"By Stream" requires a **Consume Table** — any real table in the same schema — because Snowflake only advances a stream's offset when a transaction that reads it also writes to a table. See the [Snowflake connector reference](dw-snowflake.md#how-stream-consumption-works) for details.
+:::
 
 ## Connection Management
 

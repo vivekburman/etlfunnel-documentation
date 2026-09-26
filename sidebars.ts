@@ -93,6 +93,14 @@ const sidebars: SidebarsConfig = {
                         'file-fixedwidth',
                     ],
                 },
+                {
+                    collapsed: true,
+                    type: 'category',
+                    label: 'Data Warehouse',
+                    items: [
+                        'dw-snowflake',
+                    ],
+                },
             ],
         },
         {
