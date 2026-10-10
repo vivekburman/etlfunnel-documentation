@@ -36,6 +36,10 @@ The Connector Hub allows you to configure and manage connections to various data
 
 ### Data Warehouse
 - Snowflake
+- Amazon Redshift
+
+### Object Storage
+- Amazon S3
 
 ## Database Connectors
 
@@ -404,6 +408,54 @@ Snowflake connector provides integration with Snowflake's cloud data warehouse, 
 :::note
 "By Stream" requires a **Consume Table** — any real table in the same schema — because Snowflake only advances a stream's offset when a transaction that reads it also writes to a table. See the [Snowflake connector reference](dw-snowflake.md#how-stream-consumption-works) for details.
 :::
+
+### Amazon Redshift Connector
+
+Redshift connector provides integration with Amazon Redshift clusters and Redshift Serverless workgroups, supporting a single SQL query or a custom fetch as a source, and transactional batched writes as a destination. It connects over the PostgreSQL protocol with a database user and password.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Host | Text | - | Cluster or workgroup endpoint, without the port |
+| Port | Number | - | TCP port, usually 5439 |
+| Username | Text | - | Database user |
+| Password | Password | - | Password for that user |
+| Database | Text | - | Database to connect to |
+| SSL Mode | Dropdown | - | `disable`, `require`, `verify-ca` or `verify-full` (Redshift expects `require` or stricter) |
+| Data Processing Strategy | Dropdown | By Query | Method for capturing data |
+
+**Data Processing Strategies:**
+- **By Query**: Run one SQL statement per pipeline run
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record`
+- **By Write Operation**: Use as destination database; each batch is written in a single transaction
+
+See the [Redshift connector reference](dw-redshift.md) for the hook interfaces and how Redshift types arrive in records.
+
+## Object Storage Connectors
+
+### Amazon S3 Connector
+
+S3 connector lists objects under a bucket prefix as a source and writes objects as a destination. It works with Amazon S3 and S3-compatible services such as MinIO.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Region | Text | - | AWS region of the buckets |
+| Credentials | Dropdown | Access Key | Access Key, or Instance Role (EC2 / ECS) |
+| Access Key ID | Text | - | Required with Access Key |
+| Secret Access Key | Password | - | Required with Access Key |
+| Role ARN | Text | - | Optional role to assume on top of the credentials |
+| Endpoint | Text | - | Optional base URL for S3-compatible services (uses path-style addressing) |
+| Data Processing Strategy | Dropdown | By Prefix | Method for capturing data |
+
+**Data Processing Strategies:**
+- **By Prefix**: List the objects under a bucket prefix; one record per object (bucket, key, size, last modified). Object contents are not read
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record`
+- **By Write Operation**: Use as destination; each payload is uploaded as one object
+
+See the [S3 connector reference](s3.md) for details.
 
 ## Connection Management
 

@@ -6,7 +6,7 @@ const sidebars: SidebarsConfig = {
             collapsed: false,
             type: 'category',
             label: 'Getting Started',
-            items: ['intro', 'architecture', 'setup-guide'],
+            items: ['intro', 'architecture', 'setup-guide', 'runner'],
         },
         {
             collapsed: true,
@@ -99,9 +99,24 @@ const sidebars: SidebarsConfig = {
                     label: 'Data Warehouse',
                     items: [
                         'dw-snowflake',
+                        'dw-redshift',
+                    ],
+                },
+                {
+                    collapsed: true,
+                    type: 'category',
+                    label: 'Object Storage',
+                    items: [
+                        's3',
                     ],
                 },
             ],
+        },
+        {
+            collapsed: true,
+            type: 'category',
+            label: 'AI Integration',
+            items: ['mcp'],
         },
         {
             collapsed: true,

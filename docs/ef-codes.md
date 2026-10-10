@@ -75,12 +75,13 @@ The logger returned is already scoped to the current pipeline/flow — you don't
 | `EF-M002`      | `pipeline complete` | `success`    | Pipeline finished cleanly — source exhausted, no errors.                       |
 | `EF-M003`      | `pipeline complete` | `failure`    | Pipeline stopped due to an unrecoverable error (connection error, etc.).       |
 | `EF-M004`      | `pipeline complete` | `terminated` | Pipeline was stopped early by a terminate rule (e.g. idle timeout, row limit). |
+| `EF-M005`      | `pipeline complete` | `completed_with_errors` | Pipeline ran to the end and nothing failed, but the destination rejected one or more records. See `EF-E205`. |
 
 **Fields on `EF-M001`:** `job_pid`
 
-**Fields on `EF-M002`/`EF-M003`/`EF-M004`:** `rows_source_read`, `rows_dest_committed`, `rows_transform_failed`, `rows_backlog_count`, `uptime_ms`, `end_reason`
+**Fields on `EF-M002`/`EF-M003`/`EF-M004`/`EF-M005`:** `rows_source_read`, `rows_dest_committed`, `rows_transform_failed`, `rows_backlog_count`, `uptime_ms`, `end_reason`
 
-Why it matters: this is the single most useful signal for "is my pipeline healthy right now" — `EF-M001` without a matching `EF-M002`/`003`/`004` for longer than expected usually means a pipeline is hung, not just slow.
+Why it matters: this is the single most useful signal for "is my pipeline healthy right now" — `EF-M001` without a matching `EF-M002`/`003`/`004`/`005` for longer than expected usually means a pipeline is hung, not just slow.
 
 ### Flow Lifecycle
 
@@ -106,13 +107,15 @@ This is what feeds the "Live" gauges (Total Rows Read, Transform Failures, etc.)
 | Code           | `msg`            | `event`                    | Description                                                                                   |
 | -------------- | ---------------- | -------------------------- | --------------------------------------------------------------------------------------------- |
 | `EF-M030`      | `pipeline event` | `terminate_rule_triggered` | A termination rule evaluated to true and stopped the pipeline.                                |
-| `EF-M031`      | `pipeline event` | `dest_rule_change`         | Destination write rule changed mid-run (e.g. batch size tuned). *Reserved — not yet emitted.* |
+| `EF-M031`      | `pipeline event` | `dest_rule_change`         | Destination write rule changed the batch size mid-run. Only fires when the new size actually differs from the current one. |
 | `EF-M032`      | `pipeline event` | `backlog_triggered`        | A [backlog hook](backlog-hook.md) returned `ActionContinue`, so the failed batch was queued to the backlog instead of stopping the pipeline. |
 | `EF-M033`      | `pipeline event` | `checkpoint_triggered`     | A [checkpoint hook](checkpoint-hook.md) ran. Rate-limited to at most once per configured interval — not emitted on every checkpoint call. |
 
 **Fields on `EF-M030`:** `rule`, `reason`
 
-**Fields on `EF-M032`:** `backlog_action` (the failure stage that triggered the backlog write)
+**Fields on `EF-M031`:** `dest_rule` (`increase` \| `decrease`), `old_batch_size`, `new_batch_size`
+
+**Fields on `EF-M032`:** `backlog_action` (`transform` \| `destination` \| `none` — the failure stage that triggered the backlog write)
 
 **Fields on `EF-M033`:** `checkpoint` (`continue` \| `stop`)
 
@@ -140,9 +143,9 @@ A rising `attempt` count on the same `pipeline_name` without ever reaching `EF-M
 
 | Code           | `msg`            | Description                                                                                           |
 | -------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `EF-M060`      | `pipeline alert` | Emitted automatically on every `.Error()` call across system, collection, flow, and pipeline loggers. |
+| `EF-M060`      | `pipeline alert` | Emitted automatically on every `.Error()` call across system, collection, flow, and pipeline loggers. The `code` field carries the caller's own EF code (for example `EF-E608`) when the `.Error()` call included one; `EF-M060` is used only as a fallback when the call passed none. |
 
-**Fields:** `scope` (`system` \| `collection` \| `flow` \| `pipeline`), `error`
+**Fields:** `code` (the propagated `EF-Exxx`/`EF-Mxxx` code, or `EF-M060` if the caller passed none), `scope` (`system` \| `collection` \| `flow` \| `pipeline`), `error`
 
 As covered above, this is not something any call site emits directly — it's a side effect wired into the logger itself, so it can never drift out of sync with what actually gets logged as an error.
 
@@ -165,7 +168,8 @@ As covered above, this is not something any call site emits directly — it's a 
 | `EF-E201`      | Failed to consume record at destination |
 | `EF-E202`      | Destination flush failed                |
 | `EF-E203`      | Backlog handler failed                  |
-| `EF-E204`      | Checkpoint handler failed               |
+| `EF-E204`      | Checkpoint handler failed; stops the pipeline, which ends as `failure` |
+| `EF-E205`      | Destination rejected records (per-record results, no call-level error); fields `rejected`, `first_cause`. The pipeline ends as `completed_with_errors` (`EF-M005`) |
 
 If you've written a custom [backlog hook](backlog-hook.md) or [checkpoint hook](checkpoint-hook.md), `EF-E203`/`EF-E204` are what fire when *your* hook implementation itself returns an error — not when the underlying write fails (that's `EF-E201`/`EF-E202`).
 
@@ -210,8 +214,12 @@ Note the flow/pipeline split: `EF-E301`–`EF-E303` fire during [flow-level orch
 | `EF-E516`      | Failed to find shutdown file path                          |
 | `EF-E517`      | Invalid `--decryption-key` argument                         |
 | `EF-E518`      | Decryption key was provided but failed to decrypt connection params; unrecoverable, process exits |
+| `EF-E519`      | Failed to read job definition JSON file                    |
 | `EF-E520`      | Flow fixture failed                                        |
+| `EF-E521`      | Failed to read job definition from either directory (current directory and executable directory were both tried) |
 | `EF-E530`      | Uncaught panic                                             |
+| `EF-E531`      | Pipeline connection could not be established; the pipeline reports `failure` |
+| `EF-E532`      | Connection lost during a pipeline run; the pipeline reports `failure` |
 | `EF-E540`      | Graceful shutdown timed out                                |
 | `EF-E550`      | *Unused.* Previously "retry queue is full, pipeline dropped" — queues are unbounded now, so nothing is dropped. Reserved for future reassignment; don't expect to see it in logs. |
 | `EF-E551`      | Flow queue is full, flow dropped                           |
@@ -279,16 +287,25 @@ Codes here are per-connector, per-*category*, not per log line — every connect
 | `EF-E652`      | REST API      | Request-execute error                     |
 | `EF-E653`      | REST API      | Extract/decode error                      |
 | `EF-E654`      | REST API      | Webhook server error *(Warn on shutdown)* |
+| `EF-E655`      | S3            | Dispatch/config error                     |
+| `EF-E656`      | S3            | List/read error                           |
+| `EF-E657`      | GCS           | Dispatch/config error                     |
+| `EF-E658`      | GCS           | List/read error                           |
+| `EF-E659`      | Redshift      | Read/query error                          |
 | `EF-E660`      | Snowflake     | Read/query error                          |
 | `EF-E661`      | Snowflake     | Stream read error                         |
+| `EF-E662`      | BigQuery      | Read/query error (Jobs API)               |
+| `EF-E663`      | BigQuery      | Storage API read error *(not implemented)* |
+| `EF-E664`      | Ad-hoc        | A pipeline hook could not be loaded (it doesn't compile, has no entry function of that name, has another signature or imports an unavailable package), or the connector type has no ad-hoc source bridge |
+| `EF-E665`      | Ad-hoc        | Connectivity test failed: the source couldn't be reached or authenticated, or the connector has no check |
 
 For the connectors documented under [Code Reference](sql-mysql.md), this is the range to watch alongside the connector's own docs: a `ParseFn` you author (e.g. on `MySQLSourceBinlogOptions`, `RedisSourceKeysOptions`) returning an error surfaces here under that connector's "read/decode" code, not under `EF-E401` — parsing errors during capture are distinct from transform errors, even though both come from client-authored functions. `EF-E661` also covers `ReadByStream`'s transaction lifecycle for [Snowflake](dw-snowflake.md) — a failed consume-and-commit or rollback logs here, not under `EF-E7xx`.
 
-The numbering here isn't contiguous — codes for BigQuery, Redshift, S3, and GCS exist in the engine (`EF-E655`–`EF-E659`, `EF-E662`–`EF-E663`) but those connectors aren't documented yet, so their codes are omitted from this table for now.
+`EF-E656` is how an [S3](s3.md) prefix scan that can't list its bucket (missing bucket, or no `s3:ListBucket` permission) ends the run, and `EF-E659` is the matching code for a failed [Redshift](dw-redshift.md) query. `EF-E655` fires when the S3 source can't be dispatched: an unknown capture method, or your `GeneratePrefixScan` hook returning an error.
 
 ### EF-E7xx — Destination connector errors
 
-Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-family destinations that log their own write errors directly. Other destinations (NoSQL, REST API, file-based) don't have dedicated codes here because their write failures propagate up through the bridge and are already covered by `EF-E201`/`EF-E202`.
+Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-family, warehouse and object-store destinations that log their own write errors directly. Other destinations (NoSQL, REST API, file-based) don't have dedicated codes here because their write failures propagate up through the bridge and are already covered by `EF-E201`/`EF-E202`.
 
 | Code           | Connector | Category                 |
 | -------------- | --------- | ------------------------ |
@@ -302,10 +319,17 @@ Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-fami
 | `EF-E708`      | Maria     | Write/execute error      |
 | `EF-E709`      | MSSQL     | Commit/transaction error |
 | `EF-E710`      | MSSQL     | Write/execute error      |
+| `EF-E711`      | Redshift  | Commit/transaction error |
+| `EF-E712`      | Redshift  | Write/execute error      |
 | `EF-E713`      | Snowflake | Commit/transaction error |
 | `EF-E714`      | Snowflake | Write/execute error      |
+| `EF-E715`      | BigQuery  | Streaming insert error   |
+| `EF-E716`      | S3        | Upload error             |
+| `EF-E717`      | GCS       | Upload error             |
+| `EF-E718`      | BigQuery  | Load job error           |
+| `EF-E719`      | Agent     | Row sink write/flush error |
 
-Same gap as above: `EF-E711`/`EF-E712` (Redshift) and the BigQuery/S3/GCS write-error codes exist in the engine but aren't listed here until those connectors get their own doc page.
+Object-store and warehouse destinations log their own errors here too. [S3](s3.md) uploads are not transactional: each payload is one `PutObject`, so an `EF-E716` means the payloads before the failing one are already written and the later ones were not attempted.
 
 ---
 
@@ -442,3 +466,6 @@ filtering or alerting on; plain `Info`/`Debug` lines in `service.log` don't carr
 | Code       | `message`                    | Emitted from                     |
 | ---------- | ------------------------------- | ------------------------------------ |
 | `EF-R501`  | Failed to start HTTP server *(Fatal)* | runner service startup, binding its API port |
+| `EF-R502`  | Bundled Oracle Instant Client missing or not for this OS (Oracle jobs will fail) | runner startup check of `libDir/oracle/instantclient` |
+| `EF-R503`  | No C compiler found on the host (cgo packages such as the Oracle driver, and so jobs, cannot be compiled) | runner startup check |
+| `EF-R504`  | `libaio.so.1` not found on the host (the Oracle Instant Client cannot load; Linux only) | runner startup check |
