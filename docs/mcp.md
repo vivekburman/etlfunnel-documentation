@@ -90,6 +90,8 @@ Like the UI, MCP works inside one workspace at a time. Start with these tools:
 
 After you select a workspace you no longer need to pass `workspacePID` to each tool. You can still pass it explicitly to target a different workspace.
 
+The selection is remembered on the server for 24 hours per user and per `Mcp-Session-Id`. A client that doesn't send the session header shares one selection with the user's other header-less clients.
+
 ## Using the Tools
 
 Each tool takes its arguments in a consistent shape:
@@ -98,7 +100,7 @@ Each tool takes its arguments in a consistent shape:
 - **Query-string values** go in `query`.
 - **The JSON request body** goes in `body`.
 
-Tools are annotated as read-only or destructive, so clients can show the right prompts. List operations (`.../search`) are paginated: `pageNum` starts at 1 and `pageSize` is 1-25. Bulk deletes accept at most 25 PIDs per call. Large responses are truncated at 256 KB, so narrow them with query parameters.
+Tools are annotated as read-only or destructive, so clients can show the right prompts. List operations (`.../search`) are paginated: `pageNum` starts at 1 and `pageSize` is 1-25. Bulk deletes accept at most 25 PIDs per call. Large responses are truncated at 256 KB, so narrow them with query parameters. Request bodies are limited to 4 MB.
 
 ### Built-in documentation
 
@@ -114,9 +116,9 @@ Topics covered include hook signatures, the Go models passed to hooks, per-conne
 
 ### Hook code checking
 
-Hook code (transformers, checkpoints, backlogs, destination write rules, termination rules, fixtures and connector entity hooks) is type-checked with `gopls` before it is saved.
+Hook code (transformers, checkpoints, backlogs, destination write rules, termination rules, fixtures, orchestrators, user libraries and connector entity hooks) is type-checked with `gopls` before it is saved.
 
-- `check_hook_code` returns compiler diagnostics for proposed code without saving anything.
+- `check_hook_code` returns compiler diagnostics for proposed code without saving anything. The entity must already exist (create it first), and the workspace must have been opened with `select_workspace`.
 - Every tool that saves hook code runs the same check first and **refuses to save code that has errors**.
 - To save anyway, pass `ignore_diagnostics: true`. This is also needed when `gopls` isn't reachable. It's the equivalent of the UI letting you save code that doesn't compile.
 - Code that saves successfully is also written to the workspace folder, exactly as the UI editor does.
@@ -127,7 +129,7 @@ An AI client can read data that contains text it shouldn't trust, and it can mak
 
 ### Confirmation for destructive actions
 
-Any tool that deletes, aborts, resets credentials, starts or changes builds and runs, writes files, or manages runners and users does **not** run on the first call. It returns a preview and a `confirmation_token`:
+Any tool that deletes, aborts, resets credentials, starts or changes builds and runs, updates connector hubs or webhooks, changes user libraries, writes files, or manages runners and users does **not** run on the first call. It returns a preview and a `confirmation_token`:
 
 ```json
 {
