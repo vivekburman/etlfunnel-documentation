@@ -52,33 +52,23 @@ After providing the runner details:
 2. This API key will be used to authenticate all requests from the runner to the main service
 
 
-### Step 4: Install the Runner
+### Step 4: Install and Start the Runner
+
+Runners are available for **Linux (amd64)** and **macOS (Apple silicon)**.
 
 1. Download the runner package for your target machine's operating system
-2. Extract the package to your desired location
+2. Extract the package, set your `apiKey` and `serverUrl` in `config.yaml`, then run `./setup.sh`
+3. From the install folder, run `./check-deps.sh`, then either start it with `./start.sh` or install it as a service with `sudo ./install-service.sh`
 
-## Configure the Runner
-1. **Navigate to the runner directory:**
-   ```bash
-   cd /path/to/runner/
-   ```
+```yaml
+name: "etlrunner"
+port: 8080
+apiKey: "f893e30e549c5c55"
+mode: "production"
+serverUrl: "http://localhost:9090"
+```
 
-2. **Edit the configuration file:**
-   ```bash
-   nano config.yaml
-   # or use your preferred text editor
-   ```
-
-3. **Update the YAML parameters:**
-   ```yaml
-   name: "etlrunner"
-   port: 8080
-   apiKey: "f893e30e549c5c55"
-   mode: "production"
-   serverUrl: "http://localhost:9090"
-   ```
-
-4. **Save the configuration file** and proceed to start the runner service.
+See the [Runner guide](runner) for host requirements, standalone vs. service operation, updating and troubleshooting.
 
 ## Database Connectivity Setup
 
