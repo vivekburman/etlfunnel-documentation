@@ -112,7 +112,7 @@ The server embeds ETLFunnel's reference documentation so the AI can look things 
 | `docs_search` | Searches them by keyword |
 | `docs_read` | Reads a document or one section of it |
 
-Topics covered include hook signatures, the Go models passed to hooks, per-connector behavior, worked examples, the `client/` folder layout, API limits and [EF codes](ef-codes).
+Topics covered include hook signatures, the Go models passed to hooks, per-connector behavior (including Google BigQuery and Cloud Storage), worked examples, the `client/` folder layout, API limits and [EF codes](ef-codes).
 
 ### Hook code checking
 
@@ -153,7 +153,7 @@ Some internal services look up rows by ID alone, so a request for `/workspace/5/
 
 ### Secret masking
 
-Credentials are never returned to the AI client. Passwords, API keys, tokens, private keys and cloud credentials in connector hub connection parameters are replaced with `********` in every read, as are webhook URLs and runner API keys.
+Credentials are never returned to the AI client. Passwords, API keys, tokens, private keys and cloud credentials (such as a BigQuery or Cloud Storage service account key, or AWS secret keys) in connector hub connection parameters are replaced with `********` in every read, as are webhook URLs and runner API keys.
 
 When the client updates a hub or webhook and leaves a secret out (or sends the mask back), the **stored value is kept**. Send an empty string to clear it.
 
@@ -167,7 +167,8 @@ Once connected, you can ask things like:
 
 - *"List my workspaces and open the Sales one."*
 - *"Show the flows in this workspace and tell me which ones failed in their last run."*
-- *"Create a MySQL source hub and a Snowflake destination hub, then a flow that copies the `orders` table."*
+- *"Create a MySQL source hub and a BigQuery destination hub, then a flow that copies the `orders` table."*
+- *"List the objects under `logs/2026/` in my GCS bucket, and load them into the `events` table in BigQuery with a load job."*
 - *"Write a transformer that masks the `email` column, check that it compiles, and attach it to the flow."*
 - *"Delete the flow called `old-orders`."* (the client will show you the preview and ask before it runs)
 

@@ -295,13 +295,15 @@ Codes here are per-connector, per-*category*, not per log line — every connect
 | `EF-E660`      | Snowflake     | Read/query error                          |
 | `EF-E661`      | Snowflake     | Stream read error                         |
 | `EF-E662`      | BigQuery      | Read/query error (Jobs API)               |
-| `EF-E663`      | BigQuery      | Storage API read error *(not implemented)* |
+| `EF-E663`      | BigQuery      | Storage API read error                    |
 | `EF-E664`      | Ad-hoc        | A pipeline hook could not be loaded (it doesn't compile, has no entry function of that name, has another signature or imports an unavailable package), or the connector type has no ad-hoc source bridge |
 | `EF-E665`      | Ad-hoc        | Connectivity test failed: the source couldn't be reached or authenticated, or the connector has no check |
 
 For the connectors documented under [Code Reference](sql-mysql.md), this is the range to watch alongside the connector's own docs: a `ParseFn` you author (e.g. on `MySQLSourceBinlogOptions`, `RedisSourceKeysOptions`) returning an error surfaces here under that connector's "read/decode" code, not under `EF-E401` — parsing errors during capture are distinct from transform errors, even though both come from client-authored functions. `EF-E661` also covers `ReadByStream`'s transaction lifecycle for [Snowflake](dw-snowflake.md) — a failed consume-and-commit or rollback logs here, not under `EF-E7xx`.
 
-`EF-E656` is how an [S3](s3.md) prefix scan that can't list its bucket (missing bucket, or no `s3:ListBucket` permission) ends the run, and `EF-E659` is the matching code for a failed [Redshift](dw-redshift.md) query. `EF-E655` fires when the S3 source can't be dispatched: an unknown capture method, or your `GeneratePrefixScan` hook returning an error.
+`EF-E656` is how an [S3](s3.md) prefix scan that can't list its bucket (missing bucket, or no `s3:ListBucket` permission) ends the run, and `EF-E659` is the matching code for a failed [Redshift](dw-redshift.md) query. `EF-E655` fires when the S3 source can't be dispatched: an unknown capture method, or your `GeneratePrefixScan` hook returning an error. [GCS](gcs.md) works the same way: `EF-E658` for a bucket that can't be listed, `EF-E657` for dispatch.
+
+For [BigQuery](dw-bigquery.md), `EF-E662` is a failed query (syntax error, missing table, no permission) and `EF-E663` a failed Storage API read, which fails before any row is read and never falls back to the query read. Neither is treated as a connection error.
 
 ### EF-E7xx — Destination connector errors
 
@@ -329,7 +331,9 @@ Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-fami
 | `EF-E718`      | BigQuery  | Load job error           |
 | `EF-E719`      | Agent     | Row sink write/flush error |
 
-Object-store and warehouse destinations log their own errors here too. [S3](s3.md) uploads are not transactional: each payload is one `PutObject`, so an `EF-E716` means the payloads before the failing one are already written and the later ones were not attempted.
+Object-store and warehouse destinations log their own errors here too. [S3](s3.md) uploads are not transactional: each payload is one `PutObject`, so an `EF-E716` means the payloads before the failing one are already written and the later ones were not attempted. [GCS](gcs.md) behaves the same way with `EF-E717`.
+
+[BigQuery](dw-bigquery.md) logs `EF-E715` for a failed streaming insert (one invalid row rejects its table's whole call unless `SkipInvalidRows` is set) and `EF-E718` for a failed load job, which loads nothing.
 
 ---
 

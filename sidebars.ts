@@ -100,6 +100,7 @@ const sidebars: SidebarsConfig = {
                     items: [
                         'dw-snowflake',
                         'dw-redshift',
+                        'dw-bigquery',
                     ],
                 },
                 {
@@ -108,6 +109,7 @@ const sidebars: SidebarsConfig = {
                     label: 'Object Storage',
                     items: [
                         's3',
+                        'gcs',
                     ],
                 },
             ],

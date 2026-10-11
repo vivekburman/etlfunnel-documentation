@@ -37,9 +37,11 @@ The Connector Hub allows you to configure and manage connections to various data
 ### Data Warehouse
 - Snowflake
 - Amazon Redshift
+- Google BigQuery
 
 ### Object Storage
 - Amazon S3
+- Google Cloud Storage
 
 ## Database Connectors
 
@@ -432,6 +434,30 @@ Redshift connector provides integration with Amazon Redshift clusters and Redshi
 
 See the [Redshift connector reference](dw-redshift.md) for the hook interfaces and how Redshift types arrive in records.
 
+### Google BigQuery Connector
+
+BigQuery connector provides integration with Google BigQuery, supporting a single SQL query, a Storage Read API table read, or a custom fetch as a source, and streaming inserts or Cloud Storage load jobs as a destination.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Project ID | Text | - | Google Cloud project that runs the jobs and is billed for them |
+| Dataset | Text | - | Dataset the connector writes to by default |
+| Location | Text | - | Optional location of query and load jobs, such as `US` or `asia-south1` |
+| Credentials | Dropdown | Service Account Key | Service Account Key, or Application Default Credentials |
+| Credentials JSON | Password | - | Required with Service Account Key: the text of the key |
+| Endpoint | Text | - | Optional base URL of an alternative endpoint such as an emulator |
+| Data Processing Strategy | Dropdown | By Query | Method for capturing data |
+
+**Data Processing Strategies:**
+- **By Query**: Run one standard SQL statement per pipeline run
+- **By Storage API**: Read a table directly through the BigQuery Storage Read API, with optional column selection and row restriction
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record`
+- **By Write Operation**: Use as destination; rows are streamed into existing tables, or Cloud Storage files are loaded with a load job
+
+See the [BigQuery connector reference](dw-bigquery.md) for the hook interfaces and how BigQuery types arrive in records.
+
 ## Object Storage Connectors
 
 ### Amazon S3 Connector
@@ -456,6 +482,26 @@ S3 connector lists objects under a bucket prefix as a source and writes objects 
 - **By Write Operation**: Use as destination; each payload is uploaded as one object
 
 See the [S3 connector reference](s3.md) for details.
+
+### Google Cloud Storage Connector
+
+GCS connector lists objects under a bucket prefix as a source and writes objects as a destination. It works with Google Cloud Storage and emulators such as fake-gcs-server.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Credentials | Dropdown | Service Account Key | Service Account Key, or Application Default Credentials |
+| Credentials JSON | Password | - | Required with Service Account Key: the text of the key |
+| Endpoint | Text | - | Optional base URL of an alternative endpoint such as fake-gcs-server |
+| Data Processing Strategy | Dropdown | By Prefix | Method for capturing data |
+
+**Data Processing Strategies:**
+- **By Prefix**: List the objects under a bucket prefix; one record per object (bucket, name, size, updated). Object contents are not read
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record`
+- **By Write Operation**: Use as destination; each payload is uploaded as one object
+
+See the [GCS connector reference](gcs.md) for details.
 
 ## Connection Management
 
