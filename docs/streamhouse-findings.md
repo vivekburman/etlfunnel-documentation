@@ -65,7 +65,7 @@ None of these block the orders/clicks/events example above from being built — 
 
 ## Recommendations
 
-- **Update `etlfunnel-documentation`'s Connector Hub page** to list BigQuery, Snowflake, Redshift, S3, and GCS alongside the existing 18 — they're real and shipped, just missing from the public docs.
+- ~~**Update `etlfunnel-documentation`'s Connector Hub page** to list BigQuery, Snowflake, Redshift, S3, and GCS alongside the existing 18 — they're real and shipped, just missing from the public docs.~~ **Done** — Snowflake, Redshift and S3 in 1.2.1, BigQuery and GCS in 1.2.2.
 - **Document the `AuxiliaryHub` + `cast` pattern explicitly** as the supported path for cross-system correlation, with `DedupCheck` as a worked example — right now it's discoverable only by reading the execution source.
 
 ### Open questions
