@@ -22,7 +22,7 @@ This doc checks ETLFunnel against each stage, using both the public docs site (`
 
 ## Connector inventory correction
 
-The public docs site (`etlfunnel-documentation`) lists 18 native connector types: 5 relational DBs, 6 non-relational DBs, REST API, and 6 file formats. Direct inspection of `etlfunnel-execution`'s `connector/datawarehouse/` and `core/{source,destination}/` found 5 more, undocumented on the public site:
+The public docs site (`etlfunnel-documentation`) now lists all 23 native connector types: 5 relational DBs, 6 non-relational DBs, REST API, 6 file formats, and 5 warehouse/object-store connectors. When this audit was written it listed only the first 18; direct inspection of `etlfunnel-execution`'s `connector/datawarehouse/` and `core/{source,destination}/` found the last 5, then undocumented on the public site (since added in 1.2.1 and 1.2.2):
 
 - BigQuery — `connector/datawarehouse/bigquery/bigquery.go`
 - Snowflake — `connector/datawarehouse/snowflake/snowflakesql.go`
@@ -30,7 +30,7 @@ The public docs site (`etlfunnel-documentation`) lists 18 native connector types
 - S3 — `connector/datawarehouse/s3/s3.go`
 - GCS — `connector/datawarehouse/gcs/gcs.go`
 
-All five are real, SDK-backed implementations (AWS SDK v2, `cloud.google.com/go/bigquery`, `cloud.google.com/go/storage`, `gosnowflake`, `lib/pq`), wired as both source and destination connector entities — confirmed, not stubs. Actual native connector count: **23**, not 18.
+All five are real, SDK-backed implementations (AWS SDK v2, `cloud.google.com/go/bigquery`, `cloud.google.com/go/storage`, `gosnowflake`, `lib/pq`), wired as both source and destination connector entities — confirmed, not stubs. Actual native connector count: **23** (the public docs listed 18 at the time of the audit).
 
 One caveat: S3 and GCS write plain keyed objects (`core/destination/s3/implementation.go`) — blob storage, not a managed or versioned table format. They're a storage target, same tier as the file connectors, just cloud-hosted.
 
