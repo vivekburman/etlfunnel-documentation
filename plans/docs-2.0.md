@@ -16,7 +16,7 @@ Plans live in `plans/` at the repo root, outside `docs/`, so Docusaurus does not
 1. **Story order, reader first.** Each section answers the question the reader has at that point.
 2. **Every page is verified against code** before it is written: UI labels from `web/src`, behaviour from `service/`, rules from the plans, connector shapes from `etlfunnel-execution`. Anything the code does not do is not documented.
 3. **Technical depth from the user's side:** what you see, what you can configure, what happens when it fails, and the limits. Not internal structure.
-4. **New theme:** custom landing page; restyled navbar, sidebar, typography and code blocks from the dark glass design; light mode keeps working; orange accent stays. Fonts: Sora (headings), Source Sans 3 (body), IBM Plex Mono (code).
+4. **Theme follows etlfunnel.com** (revised 2026-10-28): light warm-grey page, Manrope, floating pill navbar with a dark CTA, pill-style cards and tables, orange for buttons, links and accents only; a warm dark mode stays for the toggle. There is no custom landing page: the docs are opened onto an inner page, so `/` redirects to `/intro`.
 5. **Old URLs:** Docusaurus redirects for every moved or renamed page, so links from the website do not break.
 
 ## Story
@@ -94,3 +94,7 @@ Automated checks run against `etlfunnel-execution`: every Go interface block in 
 What was NOT verified: connector reference pages beyond those checks (behaviour prose, defaults, examples were not run or compiled); orchestrator, fixture, transformer, checkpoint, backlog, termination and write-rule pages were checked only for signatures; resource-collection, user-libraries and connector-entity prose were read, not tested; nothing was viewed in a browser, including the theme and the two redrawn diagrams.
 
 Engine note: the engine's `catalog/connectors.go` says Postgres WAL is pgoutput only ("wal2json is not available"), while the SDK (`models/bridge_model.go`, `core/source/postgres`) still accepts WAL2JSON. The docs follow the SDK. Worth confirming which is intended.
+
+### Theme revision (2026-10-28)
+
+The first theme was a dark glass design with its own landing page. It was replaced with the website's look (tokens from `etlfunnel-website/web/styles/common.css`, navbar and footer from `nav.css` and `footer.css`), and the landing page was dropped in favour of the original redirect to `/intro`. Also fixed: a navbar that marked all four links active, tables forcing the page wider than a phone, and the "Edit this page" link that pointed at the Docusaurus template repository (editUrl removed).

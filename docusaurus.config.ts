@@ -38,7 +38,7 @@ const config: Config = {
 	},
 
 	stylesheets: [
-		{ href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap', type: 'text/css' },
+		{ href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap', type: 'text/css' },
 	],
 
 	plugins: [
@@ -57,10 +57,6 @@ const config: Config = {
 					routeBasePath: "/",
 					lastVersion: "current",
 					sidebarPath: './sidebars.ts',
-					// Please change this to your repo.
-					// Remove this to remove the "edit this page" links.
-					editUrl:
-						'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
 				},
 				blog: {
 					showReadingTime: true,
@@ -68,10 +64,6 @@ const config: Config = {
 						type: ['rss', 'atom'],
 						xslt: true,
 					},
-					// Please change this to your repo.
-					// Remove this to remove the "edit this page" links.
-					editUrl:
-						'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
 					// Useful options to enforce blogging best practices
 					onInlineTags: 'warn',
 					onInlineAuthors: 'warn',
@@ -90,7 +82,7 @@ const config: Config = {
 			}
 		},
 		colorMode: {
-			defaultMode: 'dark',
+			defaultMode: 'light',
 			disableSwitch: false,
 			respectPrefersColorScheme: false,
 		},
@@ -104,15 +96,15 @@ const config: Config = {
 				href: "https://etlfunnel.com"
 			},
 			items: [
-				{ type: 'doc', docId: 'intro', position: 'left', label: 'Docs' },
-				{ type: 'doc', docId: 'quickstart', position: 'left', label: 'Quickstart' },
-				{ type: 'doc', docId: 'delivery-overview', position: 'left', label: 'Ship it' },
-				{ type: 'doc', docId: 'connector-catalog', position: 'left', label: 'Connectors' },
-				{ href: 'https://etlfunnel.com', label: 'etlfunnel.com', position: 'right' },
+				{ to: '/intro', label: 'Docs', position: 'left', activeBaseRegex: '^/(docs/)?(intro|setup-guide|architecture|runner)$' },
+				{ to: '/quickstart', label: 'Quickstart', position: 'left', activeBaseRegex: '^/(docs/)?quickstart$' },
+				{ to: '/delivery-overview', label: 'Ship it', position: 'left', activeBaseRegex: '^/(docs/)?(delivery-overview|packages|stages|sign-off|schedules|rolling-back)$' },
+				{ to: '/connector-catalog', label: 'Connectors', position: 'left', activeBaseRegex: '^/(docs/)?(connector-catalog|sql-|nosql-|file-|dw-|restapi|s3|gcs)' },
+				{ href: 'https://etlfunnel.com', label: 'etlfunnel.com', position: 'right', className: 'nav-cta' },
 			],
 		},
 		footer: {
-			style: 'dark',
+			style: 'light',
 			links: [
 				{ title: 'Start', items: [
 					{ label: 'What is ETLFunnel?', to: '/intro' },

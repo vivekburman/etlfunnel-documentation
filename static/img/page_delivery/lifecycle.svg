@@ -1,21 +1,21 @@
-<svg width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="'Source Sans 3', -apple-system, 'Segoe UI', sans-serif">
-<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#9ba0ac" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
-<rect x="1" y="1" width="758" height="328" rx="16" fill="#141620" stroke="#2a2d3a"/>
-<text x="28" y="34" font-size="12" font-weight="600" fill="#c7cddb" letter-spacing="1.2">MAKE THE CHANGE</text>
-<text x="28" y="188" font-size="12" font-weight="600" fill="#c7cddb" letter-spacing="1.2">DELIVER THE CHANGE</text>
-<g font-size="14" font-weight="600" fill="#f1efe9" text-anchor="middle">
-<rect x="28" y="50" width="150" height="62" rx="10" fill="#1a1d29" stroke="#2a2d3a"/><text x="103" y="78">Draft</text><text x="103" y="98" font-size="11" font-weight="400" fill="#9ba0ac">your private edits</text>
-<rect x="240" y="50" width="150" height="62" rx="10" fill="#1a1d29" stroke="#2a2d3a"/><text x="315" y="78">Review</text><text x="315" y="98" font-size="11" font-weight="400" fill="#9ba0ac">a teammate approves</text>
-<rect x="452" y="50" width="150" height="62" rx="10" fill="#1d2130" stroke="#8892a6"/><text x="527" y="78">Dev</text><text x="527" y="98" font-size="11" font-weight="400" fill="#c7cddb">merged and current</text>
+<svg width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="'Manrope', -apple-system, 'Segoe UI', sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#6e655e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="1" y="1" width="758" height="328" rx="16" fill="#ffffff" stroke="#e4ded8"/>
+<text x="28" y="34" font-size="12" font-weight="600" fill="#c24a17" letter-spacing="1.2">MAKE THE CHANGE</text>
+<text x="28" y="188" font-size="12" font-weight="600" fill="#c24a17" letter-spacing="1.2">DELIVER THE CHANGE</text>
+<g font-size="14" font-weight="600" fill="#241f1c" text-anchor="middle">
+<rect x="28" y="50" width="150" height="62" rx="10" fill="#faf7f4" stroke="#e4ded8"/><text x="103" y="78">Draft</text><text x="103" y="98" font-size="11" font-weight="400" fill="#6e655e">your private edits</text>
+<rect x="240" y="50" width="150" height="62" rx="10" fill="#faf7f4" stroke="#e4ded8"/><text x="315" y="78">Review</text><text x="315" y="98" font-size="11" font-weight="400" fill="#6e655e">a teammate approves</text>
+<rect x="452" y="50" width="150" height="62" rx="10" fill="#fdf0ea" stroke="#e8622a"/><text x="527" y="78">Dev</text><text x="527" y="98" font-size="11" font-weight="400" fill="#c24a17">merged and current</text>
 </g>
-<path d="M178 81H238M390 81H450" stroke="#9ba0ac" stroke-width="1.5" marker-end="url(#a)"/>
-<path d="M527 112V150Q527 160 517 160H103Q93 160 93 170V204" fill="none" stroke="#9ba0ac" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#a)"/>
-<text x="560" y="140" font-size="11" fill="#9ba0ac">cut a package</text>
-<g font-size="14" font-weight="600" fill="#f1efe9" text-anchor="middle">
-<rect x="28" y="206" width="130" height="62" rx="10" fill="#1a1d29" stroke="#2a2d3a"/><text x="93" y="234">Package</text><text x="93" y="254" font-size="11" font-weight="400" fill="#9ba0ac">frozen snapshot</text>
-<rect x="228" y="206" width="210" height="82" rx="10" fill="#1a1d29" stroke="#2a2d3a"/><text x="333" y="230">Staging</text><text x="333" y="250" font-size="11" font-weight="400" fill="#9ba0ac">promote · run · approve</text><text x="333" y="268" font-size="11" font-weight="400" fill="#9ba0ac">staging hubs</text>
-<rect x="498" y="206" width="234" height="82" rx="10" fill="#1d2130" stroke="#8892a6"/><text x="615" y="230">Production</text><text x="615" y="250" font-size="11" font-weight="400" fill="#c7cddb">promote · run · approve by someone else</text><text x="615" y="268" font-size="11" font-weight="400" fill="#c7cddb">approval releases it</text>
+<path d="M178 81H238M390 81H450" stroke="#6e655e" stroke-width="1.5" marker-end="url(#a)"/>
+<path d="M527 112V150Q527 160 517 160H103Q93 160 93 170V204" fill="none" stroke="#6e655e" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#a)"/>
+<text x="560" y="140" font-size="11" fill="#6e655e">cut a package</text>
+<g font-size="14" font-weight="600" fill="#241f1c" text-anchor="middle">
+<rect x="28" y="206" width="130" height="62" rx="10" fill="#faf7f4" stroke="#e4ded8"/><text x="93" y="234">Package</text><text x="93" y="254" font-size="11" font-weight="400" fill="#6e655e">frozen snapshot</text>
+<rect x="228" y="206" width="210" height="82" rx="10" fill="#faf7f4" stroke="#e4ded8"/><text x="333" y="230">Staging</text><text x="333" y="250" font-size="11" font-weight="400" fill="#6e655e">promote · run · approve</text><text x="333" y="268" font-size="11" font-weight="400" fill="#6e655e">staging hubs</text>
+<rect x="498" y="206" width="234" height="82" rx="10" fill="#fdf0ea" stroke="#e8622a"/><text x="615" y="230">Production</text><text x="615" y="250" font-size="11" font-weight="400" fill="#c24a17">promote · run · approve by someone else</text><text x="615" y="268" font-size="11" font-weight="400" fill="#c24a17">approval releases it</text>
 </g>
-<path d="M158 237H226M438 247H496" stroke="#9ba0ac" stroke-width="1.5" marker-end="url(#a)"/>
-<text x="28" y="312" font-size="11" fill="#666b76">A rejected package ends its trip: fix in dev, cut a new package, start again at Staging.</text>
+<path d="M158 237H226M438 247H496" stroke="#6e655e" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="28" y="312" font-size="11" fill="#8a8077">A rejected package ends its trip: fix in dev, cut a new package, start again at Staging.</text>
 </svg>
