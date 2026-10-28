@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const isProd = process.env.NODE_ENV === 'production';
 const config: Config = {
 	title: 'ETLFunnel Documentation',
-	tagline: 'Dev-First ETL Tool',
+	tagline: 'Build, review and ship data pipelines you own',
 	favicon: 'img/favicon.ico',
 
 	// Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -37,6 +37,18 @@ const config: Config = {
 		locales: ['en'],
 	},
 
+	stylesheets: [
+		{ href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap', type: 'text/css' },
+	],
+
+	plugins: [
+		['@docusaurus/plugin-client-redirects', {
+			redirects: [
+				{ from: '/stages-and-promotion', to: '/stages' },
+			],
+		}],
+	],
+
 	presets: [
 		[
 			'classic',
@@ -45,10 +57,6 @@ const config: Config = {
 					routeBasePath: "/",
 					lastVersion: "current",
 					sidebarPath: './sidebars.ts',
-					// Please change this to your repo.
-					// Remove this to remove the "edit this page" links.
-					editUrl:
-						'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
 				},
 				blog: {
 					showReadingTime: true,
@@ -56,10 +64,6 @@ const config: Config = {
 						type: ['rss', 'atom'],
 						xslt: true,
 					},
-					// Please change this to your repo.
-					// Remove this to remove the "edit this page" links.
-					editUrl:
-						'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
 					// Useful options to enforce blogging best practices
 					onInlineTags: 'warn',
 					onInlineAuthors: 'warn',
@@ -78,7 +82,7 @@ const config: Config = {
 			}
 		},
 		colorMode: {
-			defaultMode: 'dark',
+			defaultMode: 'light',
 			disableSwitch: false,
 			respectPrefersColorScheme: false,
 		},
@@ -92,13 +96,32 @@ const config: Config = {
 				href: "https://etlfunnel.com"
 			},
 			items: [
-				{
-					type: 'docSidebar',
-					sidebarId: 'tutorialSidebar',
-					position: 'left',
-					label: 'Tutorial',
-				},
+				{ to: '/intro', label: 'Docs', position: 'left', activeBaseRegex: '^/(docs/)?(intro|setup-guide|architecture|runner)$' },
+				{ to: '/quickstart', label: 'Quickstart', position: 'left', activeBaseRegex: '^/(docs/)?quickstart$' },
+				{ to: '/delivery-overview', label: 'Ship it', position: 'left', activeBaseRegex: '^/(docs/)?(delivery-overview|packages|stages|sign-off|schedules|rolling-back)$' },
+				{ to: '/connector-catalog', label: 'Connectors', position: 'left', activeBaseRegex: '^/(docs/)?(connector-catalog|sql-|nosql-|file-|dw-|restapi|s3|gcs)' },
 			],
+		},
+		footer: {
+			style: 'light',
+			links: [
+				{ title: 'Start', items: [
+					{ label: 'What is ETLFunnel?', to: '/intro' },
+					{ label: 'Setup guide', to: '/setup-guide' },
+					{ label: 'Quickstart', to: '/quickstart' },
+				] },
+				{ title: 'Build', items: [
+					{ label: 'Flows', to: '/resource-flow' },
+					{ label: 'Connector catalog', to: '/connector-catalog' },
+					{ label: 'Error codes', to: '/ef-codes' },
+				] },
+				{ title: 'Ship', items: [
+					{ label: 'How a change reaches production', to: '/delivery-overview' },
+					{ label: 'Packages', to: '/packages' },
+					{ label: 'Sign-off', to: '/sign-off' },
+				] },
+			],
+			copyright: `ETLFunnel is licensed under the Elastic License 2.0.`,
 		},
 		prism: {
 			theme: prismThemes.github,

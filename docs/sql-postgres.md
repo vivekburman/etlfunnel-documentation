@@ -130,9 +130,9 @@ const (
 
 | Key | Constant | Description |
 |-----|----------|--------------|
-| `_pg_notify_channel` | `models.MetaPGNotifyChannel` | `GenerateNotification` reads: the channel name that matched |
-| `_pg_notify_pid` | `models.MetaPGNotifyPID` | `GenerateNotification` reads: the sending backend's PID |
-| `_pg_wal_lsn` | `models.MetaPGWALLSN` | `GenerateWAL` reads: the LSN that produced this change (both `PG_OUTPUT` and `WAL2JSON` output plugins) |
+| `_pg_notify_channel` | `models.MetaPostgresNotifyChannel` | `GenerateNotification` reads: the channel name that matched |
+| `_pg_notify_pid` | `models.MetaPostgresNotifyPID` | `GenerateNotification` reads: the sending backend's PID |
+| `_pg_wal_lsn` | `models.MetaPostgresWALLSN` | `GenerateWAL` reads: the LSN that produced this change (both `PG_OUTPUT` and `WAL2JSON` output plugins) |
 
 `GenerateQuery` reads never set `Meta` — a one-shot query has no position to resume from.
 

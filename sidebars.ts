@@ -5,20 +5,18 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: false,
             type: 'category',
-            label: 'Getting Started',
-            items: ['intro', 'architecture', 'setup-guide', 'runner'],
+            label: '1 · Start here',
+            items: ['intro', 'setup-guide', 'quickstart', 'architecture', 'runner'],
         },
         {
             collapsed: true,
             type: 'category',
-            label: 'Builder',
-            items: ['connector-hub', 'resource-flow', 'resource-collection'],
-        },
-        {
-            collapsed: true,
-            type: 'category',
-            label: 'Data Plane',
+            label: '2 · Build',
             items: [
+                'connector-hub',
+                'resource-flow',
+                'flow-graph-view',
+                'resource-collection',
                 'connector-entity',
                 'transformer-hook',
                 'user-libraries',
@@ -27,7 +25,7 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: true,
             type: 'category',
-            label: 'Control Plane',
+            label: '3 · Shape how it runs',
             items: [
                 'resource-orchestrator',
                 'fixture',
@@ -40,13 +38,32 @@ const sidebars: SidebarsConfig = {
         {
             collapsed: true,
             type: 'category',
-            label: 'Executions',
-            items: ['creating-a-new-build', 'integration-webhook'],
+            label: '4 · Run and watch',
+            items: ['creating-a-new-build', 'running-while-you-develop', 'ef-codes'],
         },
         {
             collapsed: true,
             type: 'category',
-            label: 'Code Reference',
+            label: '5 · Work as a team',
+            items: ['workspaces', 'roles-and-permissions', 'drafts-and-change-sets', 'notifications'],
+        },
+        {
+            collapsed: true,
+            type: 'category',
+            label: '6 · Ship it',
+            items: ['delivery-overview', 'packages', 'stages', 'sign-off', 'schedules', 'rolling-back'],
+        },
+        {
+            collapsed: true,
+            type: 'category',
+            label: '7 · Automate',
+            items: ['integration-webhook', 'mcp'],
+        },
+        {
+            collapsed: true,
+            type: 'category',
+            label: '8 · Connector reference',
+            link: { type: 'doc', id: 'connector-catalog' },
             items: [
                 {
                     collapsed: true,
@@ -70,6 +87,7 @@ const sidebars: SidebarsConfig = {
                         'nosql-kafka',
                         'nosql-mongo',
                         'nosql-redis',
+                        'nosql-rabbitmq',
                     ],
                 },
                 {
@@ -114,18 +132,6 @@ const sidebars: SidebarsConfig = {
                 },
             ],
         },
-        {
-            collapsed: true,
-            type: 'category',
-            label: 'AI Integration',
-            items: ['mcp'],
-        },
-        {
-            collapsed: true,
-            type: 'category',
-            label: 'Observability',
-            items: ['ef-codes'],
-        }
     ],
 };
 

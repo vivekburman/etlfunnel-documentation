@@ -43,7 +43,30 @@ The Oracle Instant Client itself is bundled in `execution/libDir/oracle/instantc
 2. Click **Download**, enter a **Runner Name** and **Hostname**, and choose the package for the target machine's OS.
 3. Note the generated **API Key**. The runner uses it to authenticate every request to the server.
 
-See the [Setup Guide](setup-guide#runner-installation) for the screens.
+See the [Setup Guide](setup-guide#3-add-a-runner) for the screens.
+
+### What is this runner for?
+
+Every runner carries **one tag** that says which work it may take. You choose it when you create the runner, and you can change it later.
+
+| Tag | Takes | Who can choose it |
+| --- | --- | --- |
+| **Personal** | Only your own development work: your runs, draft runs and dev schedules | Anyone signed in |
+| **Dev** | Development runs and dev schedules | The super user |
+| **Staging** | Staging runs and staging schedules | The super user |
+| **Production** | Manual and scheduled production runs | The super user |
+
+- A job runs only on a runner whose tag matches its stage. This keeps a laptop, or a development machine, away from staging and production data.
+- A runner has one tag. A machine that serves two stages is registered as two runners.
+- A **Personal** runner is yours alone. It is listed under **My runners**, nobody else sees it, and its tag cannot change. To share a machine, delete the personal runner and register a new shared one.
+- Shared runners are under **Shared runners**. Changing a shared runner's tag affects only jobs claimed afterwards.
+- A runner with **no tag claims nothing**. Any run or schedule that names it shows why it is not running until you tag it.
+
+:::warning After upgrading
+Runners that existed before tags were introduced start **untagged**, so nothing runs on them. Open each one and choose its tag straight after the upgrade.
+:::
+
+See [Stages](./stages) for why stages are kept apart.
 
 ## 2. Configure
 

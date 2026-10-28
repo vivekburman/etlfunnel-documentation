@@ -1,42 +1,46 @@
 # Webhook
 
-Webhooks provide real-time notifications for your ETL operations, allowing you to stay informed about critical events without constantly monitoring the dashboard. Our ETL tool uses webhooks to automatically notify you when any build encounters an error, ensuring rapid response to data pipeline issues.
+A webhook posts short messages to a Slack or Microsoft Teams channel so your team hears about things without watching a dashboard. ETLFunnel uses them for two jobs:
+
+- **Run alerts**: a message when a running job starts producing errors. Described on this page.
+- **Review and release messages**: a message when a change set is submitted, merged, sent back or discarded, and when a package is cut, approved or rejected. See [Notifications and Webhooks](./notifications).
 
 <img src="img/page_resource/webhook.png" alt="Webhook Integration" height="300" />
 
-## Supported Integrations
+## Supported integrations
 
-We currently support webhook integrations with:
+- **Slack**: post to a channel through an incoming-webhook URL.
+- **Microsoft Teams**: post to a channel through a webhook URL.
 
-- **Slack** - Send notifications to channels or direct messages
-- **Microsoft Teams** - Post alerts to team channels
+## Setting one up
 
-## Notification Behavior
+Webhooks belong to a workspace and are managed by people who hold the **Manage webhooks** permission (the Operator group by default).
 
-### Error Alerting
-Webhooks are triggered when:
-- **Pipeline Failures** - When any ETL pipeline encounters an error
-- **Build Errors** - When transformation or data loading processes fail
-- **Connection Issues** - When database connectivity problems occur
+1. Create the incoming webhook in Slack or Teams and copy its URL.
+2. In ETLFunnel open **Integrations › Webhook** and create one: give it a name, choose Slack or Teams, and paste the URL.
+3. Choose **Test connection**. A sample message should arrive in the channel.
+4. Save only once the test has arrived.
 
-### Exponential Backoff
-To prevent webhook flooding, our notification system implements exponential backoff:
+Treat the URL as a secret: anyone holding it can post to your channel. ETLFunnel never shows it to the people who choose channels to notify.
 
-- **First Error** - Immediate notification
-- **Subsequent Errors** - Notifications are delayed exponentially (1min, 2min, 4min, 8min...)
-- **Maximum Delay** - Caps at 30 minutes between notifications
-
-This ensures you're informed of issues without being overwhelmed by repetitive alerts during extended outages.
-
-## Configuration
-
-### Webhook Setup Process
-1. **Create Webhook** - Set up the webhook URL in Slack or Teams
-3. **Test Connection** - Use the "Test Connection" button to verify the webhook works
-4. **Save Configuration** - Only save after confirming the test is successful
-
-:::tip Test Before Saving
-Always test your webhook connection before saving the configuration. This ensures notifications will be delivered when actual errors occur.
+:::tip
+Test before saving. A webhook that was never tested is the usual reason an alert is missed.
 :::
 
-This integration keeps your team immediately informed of ETL issues, enabling faster resolution and maintaining data pipeline reliability.
+## Run alerts
+
+Attach a webhook to a run or schedule in its settings. While that job is **running**, ETLFunnel watches its error counts. When new errors appear, it posts an alert. Draft runs never send alerts.
+
+### Backoff
+
+To keep an extended outage from flooding the channel, alerts for one run back off exponentially:
+
+- The **first** error alert is sent at once.
+- After that, the next alert for the same run waits 1 minute, then 2, 4, 8, 16, and never more than **30 minutes**.
+- An alert is sent only if new errors appeared since the last one.
+
+When the job finishes, its alerts stop.
+
+## What messages never contain
+
+Messages name what happened, who did it and where. They never include a reviewer's comment and carry no link. A message that fails to send never holds up or undoes the action behind it.

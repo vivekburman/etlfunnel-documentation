@@ -1,6 +1,12 @@
 # Creating a New Build
 
-To create a new ETL build, navigate to the builds section and click **Create New**. You'll be presented with several configuration tabs that need to be properly set up.
+A **build** is a request to run a flow or collection, now or on a schedule. This page describes the settings. **What you can do with a build depends on where you are:**
+
+- **In development**, you create a run directly, choosing **Run from: Base or Draft** and development databases. See [Running While You Develop](./running-while-you-develop).
+- **In staging or production**, start a run from the stage's **Bindings** list. The databases come from the stage's bindings. See [Stages](./stages).
+- **A recurring schedule** can be a dev, staging or production schedule. Dev schedules belong to their creator; staging and production schedules belong to the stage and are made by its owners. See [Schedules](./schedules).
+
+To create a development build, navigate to the builds section and click **Create New**. You'll be presented with several configuration tabs that need to be properly set up.
 
 ## Basic Configuration
 
@@ -17,7 +23,7 @@ Select the execution type for your build:
 ## Execution Settings
 
 ### Runner
-Select the remote runner machine environment for your build to be executed on
+Select the remote runner machine environment for your build to be executed on. Only runners whose tag fits the stage are listed (see [Runner](./runner)).
 
 ### Schedule Options
 Configure when your ETL build should run:

@@ -24,6 +24,8 @@ For a default local install with the `etlfunnel` tenant:
 http://localhost:9090/etlfunnel/mcp
 ```
 
+(With the Docker package the server is on port `9022` instead; see the [Setup Guide](./setup-guide).)
+
 The tenant in the URL must match the tenant of the credentials you authenticate with; otherwise the server answers `403`.
 
 ## Authentication
@@ -76,6 +78,21 @@ curl -si -u admin:admin -X POST $URL \
 ```
 
 The response carries an `Mcp-Session-Id` header. Send it on later calls so your selected workspace is remembered for that session.
+
+## What MCP Can and Cannot Do
+
+MCP works on the building side of ETLFunnel. It reads and writes **drafts** exactly as a person does: its creates, edits and deletes land in the active change set of the account it uses, and a person submits that change set from the browser.
+
+By design, MCP has **no tools** for:
+
+- submitting, holding, withdrawing, reviewing or approving change sets,
+- cutting packages, promoting them, or signing them off in a stage,
+- changing a stage's hubs, bindings or schedules (the Shared hub tier is available; Staging and Production are not), and
+- managing users, groups or workspace assignments.
+
+This is deliberate. A tool that could approve a change set, or change a group's permissions, would let an AI client grant itself the right to ship. The review and delivery path stays with people. See [How a Change Reaches Production](./delivery-overview).
+
+Because the session runs as a user, it also inherits that user's workspaces and group: `list_workspaces` shows only the workspaces the account is assigned to, and a call that needs a permission the group lacks is refused, as in the browser. See [Roles and Permissions](./roles-and-permissions).
 
 ## Working With Workspaces
 
