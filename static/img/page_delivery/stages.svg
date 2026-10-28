@@ -1,0 +1,22 @@
+<svg width="100%" viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="'Source Sans 3', -apple-system, 'Segoe UI', sans-serif">
+<rect x="1" y="1" width="758" height="298" rx="16" fill="#141620" stroke="#2a2d3a"/>
+<g text-anchor="middle" font-size="14" font-weight="600" fill="#f1efe9">
+<rect x="24" y="28" width="212" height="244" rx="12" fill="#1a1d29" stroke="#2a2d3a"/><text x="130" y="56">Dev</text>
+<text x="130" y="86" font-size="12" font-weight="400" fill="#9ba0ac">runs dev and your drafts</text>
+<rect x="44" y="108" width="172" height="40" rx="8" fill="#141620" stroke="#2a2d3a"/><text x="130" y="133" font-size="12">Shared hubs</text>
+<rect x="44" y="160" width="172" height="40" rx="8" fill="#141620" stroke="#2a2d3a"/><text x="130" y="185" font-size="12">Dev / personal runners</text>
+<rect x="274" y="28" width="212" height="244" rx="12" fill="#1a1d29" stroke="#2a2d3a"/><text x="380" y="56">Staging</text>
+<text x="380" y="86" font-size="12" font-weight="400" fill="#9ba0ac">holds one package</text>
+<rect x="294" y="108" width="172" height="40" rx="8" fill="#141620" stroke="#2a2d3a"/><text x="380" y="133" font-size="12">Staging hubs</text>
+<rect x="294" y="160" width="172" height="40" rx="8" fill="#141620" stroke="#2a2d3a"/><text x="380" y="185" font-size="12">Staging runners</text>
+<text x="380" y="236" font-size="12" font-weight="400" fill="#c7cddb">verdict: approve / reject</text>
+<rect x="524" y="28" width="212" height="244" rx="12" fill="#1d2130" stroke="#8892a6"/><text x="630" y="56">Production</text>
+<text x="630" y="82" font-size="12" font-weight="400" fill="#c7cddb">holds a candidate (manual runs)</text>
+<text x="630" y="100" font-size="12" font-weight="400" fill="#c7cddb">keeps a released package (schedules)</text>
+<rect x="544" y="116" width="172" height="40" rx="8" fill="#141620" stroke="#8892a6" stroke-opacity=".5"/><text x="630" y="141" font-size="12">Production hubs</text>
+<rect x="544" y="166" width="172" height="40" rx="8" fill="#141620" stroke="#8892a6" stroke-opacity=".5"/><text x="630" y="191" font-size="12">Production runners</text>
+<text x="630" y="236" font-size="12" font-weight="400" fill="#c7cddb">approval releases the package</text>
+</g>
+<defs><marker id="b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#9ba0ac" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M238 150H272M488 150H522" stroke="#9ba0ac" stroke-width="1.5" marker-end="url(#b)"/>
+</svg>

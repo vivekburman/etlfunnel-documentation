@@ -132,3 +132,17 @@ Imagine you're building a real-time sync from a PostgreSQL production database t
 - **User Libraries**: `PIIHasher`, `ElasticDocBuilder`, and `PhoneFormatter` utilities shared across all three flows
 
 This is ETLFunnel's full model. Every feature in these docs maps to one of these layers.
+
+---
+
+## Beyond the Planes: How Changes Are Delivered
+
+The two planes describe how a pipeline *runs*. A third concern is how a pipeline *changes* safely over time, and it sits around the planes rather than inside them.
+
+- **Workspace.** Everything above lives in a workspace, one project. People are assigned to workspaces, each with a group that decides what they can do there. See [Workspaces](./workspaces).
+- **Draft and review.** Edits are made on private drafts, grouped into change sets, and merge into **dev**, the current approved version, only when a reviewer approves. See [Drafts and Change Sets](./drafts-and-change-sets).
+- **Package.** A package is a frozen snapshot of the logic in the whole workspace. It holds no database connections. See [Packages](./packages).
+- **Stages.** A package is promoted into **Staging** and then **Production**. Each stage has its own databases, runners and owners, runs one package, and ends with a sign-off. Production's schedules run the last package signed off there. See [Stages](./stages) and [Sign-off](./sign-off).
+- **Runners.** Each runner is tagged for one purpose (your own work, dev, staging or production), so a job only runs on a runner meant for its stage.
+
+The server coordinates all of this, and runners execute only what the rules allow. See **[How a Change Reaches Production](./delivery-overview)**.

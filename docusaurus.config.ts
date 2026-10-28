@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const isProd = process.env.NODE_ENV === 'production';
 const config: Config = {
 	title: 'ETLFunnel Documentation',
-	tagline: 'Dev-First ETL Tool',
+	tagline: 'Build, review and ship data pipelines you own',
 	favicon: 'img/favicon.ico',
 
 	// Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -36,6 +36,18 @@ const config: Config = {
 		defaultLocale: 'en',
 		locales: ['en'],
 	},
+
+	stylesheets: [
+		{ href: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap', type: 'text/css' },
+	],
+
+	plugins: [
+		['@docusaurus/plugin-client-redirects', {
+			redirects: [
+				{ from: '/stages-and-promotion', to: '/stages' },
+			],
+		}],
+	],
 
 	presets: [
 		[
@@ -92,13 +104,33 @@ const config: Config = {
 				href: "https://etlfunnel.com"
 			},
 			items: [
-				{
-					type: 'docSidebar',
-					sidebarId: 'tutorialSidebar',
-					position: 'left',
-					label: 'Tutorial',
-				},
+				{ type: 'doc', docId: 'intro', position: 'left', label: 'Docs' },
+				{ type: 'doc', docId: 'quickstart', position: 'left', label: 'Quickstart' },
+				{ type: 'doc', docId: 'delivery-overview', position: 'left', label: 'Ship it' },
+				{ type: 'doc', docId: 'connector-catalog', position: 'left', label: 'Connectors' },
+				{ href: 'https://etlfunnel.com', label: 'etlfunnel.com', position: 'right' },
 			],
+		},
+		footer: {
+			style: 'dark',
+			links: [
+				{ title: 'Start', items: [
+					{ label: 'What is ETLFunnel?', to: '/intro' },
+					{ label: 'Setup guide', to: '/setup-guide' },
+					{ label: 'Quickstart', to: '/quickstart' },
+				] },
+				{ title: 'Build', items: [
+					{ label: 'Flows', to: '/resource-flow' },
+					{ label: 'Connector catalog', to: '/connector-catalog' },
+					{ label: 'Error codes', to: '/ef-codes' },
+				] },
+				{ title: 'Ship', items: [
+					{ label: 'How a change reaches production', to: '/delivery-overview' },
+					{ label: 'Packages', to: '/packages' },
+					{ label: 'Sign-off', to: '/sign-off' },
+				] },
+			],
+			copyright: `ETLFunnel is licensed under the Elastic License 2.0.`,
 		},
 		prism: {
 			theme: prismThemes.github,

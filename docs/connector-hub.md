@@ -505,20 +505,34 @@ See the [GCS connector reference](gcs.md) for details.
 
 ## Connection Management
 
+## Tiers: Shared, Staging and Production
+
+Every hub belongs to a **tier**, chosen when it is created and fixed afterwards. The **Hub** screen (**Builder › Hub**) shows the tiers as tabs:
+
+| Tab | Used by | Managed by |
+|---|---|---|
+| **Shared** | Dev: your runs and draft runs | Anyone with `hub:dev:manage` (Developer and up) |
+| **Staging** | Runs in Staging | Holders of `hub:staging:manage` (Release manager) |
+| **Production** | Runs in Production, including its schedules | Holders of `hub:production:manage` (Production approver) |
+
+A run only ever uses hubs of its own stage's tier, so staging can never read production data and dev can touch neither. The flow itself names no hub: each stage **binds** its flows to hubs of its own tier. See [Stages](./stages).
+
+Staging and production hubs are changed directly by their owners, with no review. Their passwords are **write-only**: nobody can read one back, and every change is recorded with who changed which fields, never the values. A hub that a flow still uses cannot be deleted.
+
 ### Creating a New Connection
 
-1. Navigate to the Connector Hub in your ETL platform
-2. Select "Create New"
-3. Choose your database type from the supported connectors
-4. Fill in the required configuration parameters
-5. Select the appropriate data processing strategy
-6. Test the connection to validate configuration
-7. Save the connector configuration
+1. Open **Builder › Hub** and choose the tab for the tier you are creating a hub for.
+2. Choose the add button and pick the database type.
+3. Fill in the connection parameters. The tables above list every field of each connector.
+4. Choose **Test connection** to check the address, the credentials and access.
+5. Save.
 
 ### Testing Connections
 
-Before saving any connector configuration, use the built-in connection test feature to verify:
-- Network connectivity to the database server
-- Authentication credentials validity
-- Database/collection accessibility
-- Required permissions for the selected processing strategy
+The test checks that:
+
+- the server can reach the database,
+- the credentials are accepted, and
+- the database or collection can be opened.
+
+Remember that a **runner** opens the real connection when a job runs. A test from the server proves the credentials; it does not prove that the runner's machine can reach the database. If a run fails to connect while the test passed, check the network path from the runner.

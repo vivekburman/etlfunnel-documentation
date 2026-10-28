@@ -1,0 +1,31 @@
+<svg width="100%" viewBox="0 0 680 250" xmlns="http://www.w3.org/2000/svg" font-family="'Anthropic Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="10" y="10" width="660" height="230" rx="16" fill="rgb(68,68,65)" stroke="rgb(180,178,169)" stroke-width="0.5"/>
+<rect x="40" y="50" width="130" height="52" rx="7" fill="rgb(60,52,137)" stroke="rgb(175,169,236)" stroke-width="0.5"/>
+<text x="105.0" y="73.0" text-anchor="middle" font-size="13" font-weight="500" fill="rgb(206,203,246)">Open</text>
+<text x="105.0" y="90.0" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(175,169,236)">you are editing</text>
+<rect x="270" y="50" width="130" height="52" rx="7" fill="rgb(60,52,137)" stroke="rgb(175,169,236)" stroke-width="0.5"/>
+<text x="335.0" y="73.0" text-anchor="middle" font-size="13" font-weight="500" fill="rgb(206,203,246)">In review</text>
+<text x="335.0" y="90.0" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(175,169,236)">locked</text>
+<rect x="500" y="50" width="130" height="52" rx="7" fill="rgb(8,80,65)" stroke="rgb(93,202,165)" stroke-width="0.5"/>
+<text x="565.0" y="73.0" text-anchor="middle" font-size="13" font-weight="500" fill="rgb(159,225,203)">Merged</text>
+<text x="565.0" y="90.0" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(93,202,165)">now part of base</text>
+<rect x="270" y="160" width="130" height="52" rx="7" fill="rgb(60,52,137)" stroke="rgb(175,169,236)" stroke-width="0.5"/>
+<text x="335.0" y="183.0" text-anchor="middle" font-size="13" font-weight="500" fill="rgb(206,203,246)">Changes requested</text>
+<text x="335.0" y="200.0" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(175,169,236)">back with you</text>
+<rect x="40" y="160" width="130" height="52" rx="7" fill="rgb(44,44,42)" stroke="rgb(120,118,110)" stroke-width="0.5"/>
+<text x="105.0" y="183.0" text-anchor="middle" font-size="13" font-weight="500" fill="rgb(211,209,199)">Abandoned</text>
+<text x="105.0" y="200.0" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(120,118,110)">restorable for 90 days</text>
+<polyline points="170,70 268,70" fill="none" stroke="rgb(175,169,236)" stroke-width="1.2" marker-end="url(#a)"/>
+<text x="219" y="62" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(175,169,236)">submit</text>
+<polyline points="268,88 172,88" fill="none" stroke="rgb(175,169,236)" stroke-width="1.2" marker-end="url(#a)"/>
+<text x="219" y="104" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(175,169,236)">withdraw</text>
+<polyline points="400,76 498,76" fill="none" stroke="rgb(93,202,165)" stroke-width="1.2" marker-end="url(#a)"/>
+<text x="449" y="68" text-anchor="middle" font-size="11" font-weight="400" fill="rgb(93,202,165)">approve</text>
+<polyline points="320,102 320,158" fill="none" stroke="rgb(175,169,236)" stroke-width="1.2" marker-end="url(#a)"/>
+<text x="314" y="134" text-anchor="end" font-size="11" font-weight="400" fill="rgb(175,169,236)">request changes</text>
+<polyline points="350,158 350,104" fill="none" stroke="rgb(175,169,236)" stroke-width="1.2" marker-end="url(#a)"/>
+<text x="356" y="134" text-anchor="start" font-size="11" font-weight="400" fill="rgb(175,169,236)">resubmit</text>
+<polyline points="105,102 105,158" fill="none" stroke="rgb(180,178,169)" stroke-width="1.2" marker-end="url(#a)" stroke-dasharray="4 3"/>
+<text x="111" y="134" text-anchor="start" font-size="11" font-weight="400" fill="rgb(180,178,169)">delete</text>
+</svg>

@@ -1,44 +1,152 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * ETLFunnel docs theme. Dark glass by default, with a light mode that keeps the same orange accent.
+ * Fonts are loaded in docusaurus.config.ts (Sora headings, Source Sans 3 body, IBM Plex Mono code).
  */
 
-/* StreamCraft brand colors — hue 17 (orange), gray backgrounds hue 20 */
 :root {
   --ifm-color-primary: hsl(17, 95%, 47%);
-  --ifm-color-primary-dark: hsl(17, 95%, 40%);
-  --ifm-color-primary-darker: hsl(17, 90%, 35%);
-  --ifm-color-primary-darkest: hsl(17, 90%, 28%);
-  --ifm-color-primary-light: hsl(17, 95%, 57%);
-  --ifm-color-primary-lighter: hsl(17, 100%, 63%);
-  --ifm-color-primary-lightest: hsl(17, 100%, 70%);
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --ifm-color-primary-dark: hsl(17, 95%, 42%);
+  --ifm-color-primary-darker: hsl(17, 95%, 38%);
+  --ifm-color-primary-darkest: hsl(17, 90%, 31%);
+  --ifm-color-primary-light: hsl(17, 95%, 54%);
+  --ifm-color-primary-lighter: hsl(17, 100%, 60%);
+  --ifm-color-primary-lightest: hsl(17, 100%, 68%);
+
+  --ifm-link-color: var(--ifm-font-color-base);
+  --ifm-link-hover-color: var(--ifm-color-primary);
+  --ifm-font-family-base: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+  --ifm-heading-font-family: 'Sora', ui-sans-serif, system-ui, sans-serif;
+  --ifm-font-family-monospace: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  --ifm-font-size-base: 100%;
+  --ifm-line-height-base: 1.65;
+  --ifm-code-font-size: 90%;
+  --ifm-heading-font-weight: 700;
+  --ifm-global-radius: 10px;
+  --ifm-navbar-height: 3.75rem;
+  --ifm-table-border-color: var(--ef-line);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+
+  --ifm-background-color: #fbf9f6;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-navbar-background-color: rgba(251, 249, 246, 0.85);
+  --ifm-footer-background-color: #1c1b19;
+  --ifm-font-color-base: #26241f;
+  --ifm-heading-color: #14130f;
+
+  --ef-bg: #fbf9f6;
+  --ef-raise: #ffffff;
+  --ef-raise-2: #f4f0ea;
+  --ef-line: #e5dfd6;
+  --ef-ink-soft: #5b5851;
+  --ef-accent-wash: rgba(0, 0, 0, 0.05);
+  --ef-good: #1f8a4c;
+  --ef-info: #1c6fb8;
+  --ef-glow: rgba(255, 106, 43, 0.04);
 }
 
 [data-theme='dark'] {
-  --ifm-color-primary: hsl(17, 95%, 63%);
-  --ifm-color-primary-dark: hsl(17, 95%, 57%);
-  --ifm-color-primary-darker: hsl(17, 95%, 47%);
-  --ifm-color-primary-darkest: hsl(17, 90%, 40%);
-  --ifm-color-primary-light: hsl(17, 100%, 70%);
-  --ifm-color-primary-lighter: hsl(17, 100%, 76%);
-  --ifm-color-primary-lightest: hsl(17, 100%, 82%);
+  --ifm-color-primary: #ff7a3f;
+  --ifm-color-primary-dark: #ff6a2b;
+  --ifm-color-primary-darker: #f95a15;
+  --ifm-color-primary-darkest: #d64506;
+  --ifm-color-primary-light: #ff8d5a;
+  --ifm-color-primary-lighter: #ff9d70;
+  --ifm-color-primary-lightest: #ffb37a;
 
-  --ifm-background-color: hsl(20, 4%, 12%);
-  --ifm-background-surface-color: hsl(20, 4%, 16%);
-  --ifm-navbar-background-color: hsl(20, 4%, 16%);
-  --ifm-toc-border-color: hsl(20, 4%, 26%);
-  --ifm-color-emphasis-300: hsl(20, 4%, 26%);
-  --ifm-footer-background-color: hsl(20, 4%, 10%);
+  --ifm-background-color: #0a0b0f;
+  --ifm-background-surface-color: #141620;
+  --ifm-navbar-background-color: rgba(10, 11, 15, 0.82);
+  --ifm-footer-background-color: #07080b;
+  --ifm-toc-border-color: #22242e;
+  --ifm-color-emphasis-200: #1a1d29;
+  --ifm-color-emphasis-300: #22242e;
+  --ifm-font-color-base: #e4e2dc;
+  --ifm-heading-color: #f1efe9;
+  --ifm-menu-color: #b6b9c2;
+  --ifm-menu-color-background-active: rgba(255, 255, 255, 0.06);
+  --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.04);
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.07);
 
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ef-bg: #0a0b0f;
+  --ef-raise: #141620;
+  --ef-raise-2: #1a1d29;
+  --ef-line: #22242e;
+  --ef-ink-soft: #9ba0ac;
+  --ef-accent-wash: rgba(255, 255, 255, 0.07);
+  --ef-good: #5fd08a;
+  --ef-info: #7cc4ff;
+  --ef-glow: rgba(255, 106, 43, 0.05);
 }
-.menu__list-item .menu__link {
-  font-size: 0.95rem;
-  font-weight: 400;
+
+html { scroll-behavior: smooth; }
+body { background-color: var(--ifm-background-color); }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* ---------- navbar ---------- */
+.navbar {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--ef-line);
+  box-shadow: none;
 }
+.navbar__title { font-family: var(--ifm-heading-font-family); font-weight: 700; letter-spacing: -0.01em; }
+.navbar__link { font-weight: 500; font-size: 0.95rem; }
+.navbar__link--active { color: var(--ifm-heading-color); box-shadow: inset 0 -2px 0 var(--ifm-color-primary); }
+
+/* ---------- sidebar ---------- */
+.theme-doc-sidebar-container { border-right: 1px solid var(--ef-line) !important; }
+.menu__list-item .menu__link { font-size: 0.93rem; font-weight: 400; border-radius: 0 8px 8px 0; }
+.menu__link--active:not(.menu__link--sublist) {
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+  box-shadow: inset 2px 0 0 var(--ifm-color-primary);
+}
+.menu__link--sublist-caret,
 .menu__link.menu__link--sublist.menu__link--sublist-caret {
-  font-size: 1.1rem;
+  font-family: var(--ifm-heading-font-family);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ef-ink-soft);
 }
+.menu__list .menu__list .menu__link--sublist-caret { text-transform: none; letter-spacing: 0; font-size: 0.9rem; font-weight: 500; }
+
+/* ---------- article ---------- */
+.markdown h1 { font-size: clamp(2rem, 3.4vw, 2.6rem); letter-spacing: -0.02em; margin-bottom: 1.2rem; }
+.markdown h2 { font-size: 1.55rem; letter-spacing: -0.015em; margin-top: 2.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--ef-line); }
+.markdown h3 { font-size: 1.2rem; margin-top: 1.9rem; }
+.markdown > p, .markdown li { max-width: 74ch; }
+.markdown a:not(.button) { text-decoration-color: var(--ef-ink-soft); text-underline-offset: 3px; }
+.markdown img { border-radius: var(--ifm-global-radius); }
+.markdown hr { background: var(--ef-line); height: 1px; margin: 2rem 0; }
+
+.markdown table { display: table; width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--ef-line); border-radius: var(--ifm-global-radius); overflow: hidden; font-size: 0.93rem; }
+.markdown table th { background: var(--ef-raise-2); font-family: var(--ifm-heading-font-family); font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ef-ink-soft); border: 0; border-bottom: 1px solid var(--ef-line); }
+.markdown table td { border: 0; border-bottom: 1px solid var(--ef-line); }
+.markdown table tr:last-child td { border-bottom: 0; }
+.markdown table tr { background: transparent !important; }
+
+code { border: 1px solid var(--ef-line); background: var(--ef-raise-2); border-radius: 6px; padding: 0.08rem 0.35rem; }
+pre code, a code { border: 0; background: none; padding: 0; }
+.theme-code-block { border-radius: var(--ifm-global-radius); border: 1px solid var(--ef-line); box-shadow: none !important; }
+[data-theme='dark'] .theme-code-block { background: #0f111a; }
+
+/* ---------- admonitions ---------- */
+.alert { border: 1px solid var(--ef-line); border-left-width: 3px; border-radius: var(--ifm-global-radius); box-shadow: none; background: var(--ef-raise); }
+[data-theme='dark'] .alert { color: var(--ifm-font-color-base); }
+
+/* ---------- table of contents, pagination ---------- */
+.table-of-contents__link--active { color: var(--ifm-heading-color); font-weight: 600; }
+.pagination-nav__link { border: 1px solid var(--ef-line); border-radius: var(--ifm-global-radius); background: var(--ef-raise); transition: border-color .15s ease, transform .15s ease; }
+.pagination-nav__link:hover { border-color: var(--ef-ink-soft); transform: translateY(-1px); }
+.pagination-nav__sublabel { font-family: var(--ifm-font-family-monospace); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ---------- footer ---------- */
+.footer { border-top: 1px solid var(--ef-line); }
+.footer__title { font-family: var(--ifm-heading-font-family); font-size: 0.78rem; letter-spacing: 0.09em; text-transform: uppercase; }
+.footer__copyright { color: var(--ef-ink-soft); font-size: 0.85rem; }
+
+/* ---------- keep orange to an accent ---------- */
+.breadcrumbs__item--active .breadcrumbs__link { color: var(--ifm-heading-color); background: var(--ef-accent-wash); }
+.menu__link--active:not(.menu__link--sublist) { background: var(--ef-accent-wash); }
