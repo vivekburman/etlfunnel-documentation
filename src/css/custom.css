@@ -21,7 +21,7 @@
   --ifm-code-font-size: 90%;
   --ifm-heading-font-weight: 800;
   --ifm-global-radius: 12px;
-  --ifm-navbar-height: 3.5rem;
+  --ifm-navbar-height: 3rem;
   --ifm-link-color: var(--ifm-color-primary);
   --ifm-link-hover-color: var(--ifm-color-primary-darker);
   --ifm-table-border-color: var(--ef-border);
@@ -91,7 +91,10 @@ body { background-color: var(--ifm-background-color); }
   border-bottom: 1px solid var(--ef-border);
   box-shadow: none;
 }
-.navbar__title { font-weight: 800; letter-spacing: -0.02em; font-size: 1.1rem; }
+.navbar { padding-top: 0; padding-bottom: 0; }
+.navbar__title { font-weight: 800; letter-spacing: -0.02em; font-size: 1rem; }
+.navbar__logo { height: 1.5rem; }
+.navbar__logo img { height: 1.5rem; }
 .navbar__link { font-weight: 500; font-size: 0.9rem; color: var(--ef-text-2); }
 .navbar__link:hover, .navbar__link--active { color: var(--ifm-heading-color); }
 .navbar__link--active { box-shadow: inset 0 -2px 0 var(--ifm-color-primary); border-radius: 0; }
@@ -102,14 +105,14 @@ body { background-color: var(--ifm-background-color); }
 .menu__link--active:not(.menu__link--sublist) { font-weight: 700; }
 .menu__link--sublist-caret,
 .menu__link.menu__link--sublist.menu__link--sublist-caret {
-  font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ef-text-2);
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ef-text-2);
 }
 .menu__list .menu__list .menu__link--sublist-caret { text-transform: none; letter-spacing: 0; font-size: 0.9rem; font-weight: 600; }
 
 /* ---------- article ---------- */
-.markdown h1 { font-size: clamp(2rem, 3.4vw, 2.7rem); letter-spacing: -0.03em; line-height: 1.12; margin-bottom: 1.2rem; }
-.markdown h2 { font-size: 1.55rem; letter-spacing: -0.02em; margin-top: 2.6rem; padding-bottom: 0.45rem; border-bottom: 1px solid var(--ef-border); }
-.markdown h3 { font-size: 1.2rem; letter-spacing: -0.01em; margin-top: 1.9rem; }
+.markdown h1 { font-size: clamp(1.7rem, 2.6vw, 2.1rem); letter-spacing: -0.025em; line-height: 1.15; margin-bottom: 1rem; }
+.markdown h2 { font-size: 1.3rem; letter-spacing: -0.015em; margin-top: 2rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--ef-border); }
+.markdown h3 { font-size: 1.05rem; letter-spacing: -0.01em; margin-top: 1.5rem; }
 .markdown > p, .markdown li { max-width: 76ch; color: var(--ifm-font-color-base); }
 .markdown a:not(.button) { font-weight: 600; text-decoration: none; }
 .markdown a:not(.button):hover { text-decoration: underline; text-underline-offset: 3px; }
