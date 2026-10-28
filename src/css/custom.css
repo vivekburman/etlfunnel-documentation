@@ -95,7 +95,6 @@ body { background-color: var(--ifm-background-color); }
 .navbar__link { font-weight: 500; font-size: 0.9rem; color: var(--ef-text-2); }
 .navbar__link:hover, .navbar__link--active { color: var(--ifm-heading-color); }
 .navbar__link--active { box-shadow: inset 0 -2px 0 var(--ifm-color-primary); border-radius: 0; }
-.navbar__item.nav-cta::after { content: " \2197"; }
 
 /* ---------- sidebar ---------- */
 .theme-doc-sidebar-container { border-right: 1px solid var(--ef-border) !important; }

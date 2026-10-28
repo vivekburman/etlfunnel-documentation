@@ -100,7 +100,6 @@ const config: Config = {
 				{ to: '/quickstart', label: 'Quickstart', position: 'left', activeBaseRegex: '^/(docs/)?quickstart$' },
 				{ to: '/delivery-overview', label: 'Ship it', position: 'left', activeBaseRegex: '^/(docs/)?(delivery-overview|packages|stages|sign-off|schedules|rolling-back)$' },
 				{ to: '/connector-catalog', label: 'Connectors', position: 'left', activeBaseRegex: '^/(docs/)?(connector-catalog|sql-|nosql-|file-|dw-|restapi|s3|gcs)' },
-				{ href: 'https://etlfunnel.com', label: 'etlfunnel.com', position: 'right', className: 'nav-cta' },
 			],
 		},
 		footer: {
