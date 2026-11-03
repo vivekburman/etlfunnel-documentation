@@ -1,6 +1,6 @@
 # Docs 2.0
 
-Status: **all eight sections, the theme, redirects and the sidebar done 2026-10-28. Not viewed in a browser; not committed.**
+Status: **all eight sections, the theme, redirects and the sidebar done 2026-10-28, committed and in PR; theme and new pages viewed in a browser. Qdrant connector added 2026-11-03.**
 
 Plans live in `plans/` at the repo root, outside `docs/`, so Docusaurus does not publish them. The code repo (`etlfunnel`) and the engine repo (`etlfunnel-execution`) are read-only: docs are checked against them, never the other way round.
 
@@ -98,3 +98,11 @@ Engine note: the engine's `catalog/connectors.go` says Postgres WAL is pgoutput 
 ### Theme revision (2026-10-28)
 
 The first theme was a dark glass design with its own landing page. It was replaced with the website's look (tokens from `etlfunnel-website/web/styles/common.css`, navbar and footer from `nav.css` and `footer.css`), and the landing page was dropped in favour of the original redirect to `/intro`. Also fixed: a navbar that marked all four links active, tables forcing the page wider than a phone, and the "Edit this page" link that pointed at the Docusaurus template repository (editUrl removed).
+
+### Qdrant connector (2026-11-03)
+
+New: nosql-qdrant.md (24th connector — type 25, NoSQL category — merged to `etlfunnel-execution` main as a real source+destination, not a stub). Wired into connector-hub (list and a new Qdrant Connector subsection), connector-catalog (count and table row), connector-entity (list), intro (count and list), ef-codes (EF-E666/E667 rows plus an explanatory note), and the sidebar.
+
+Checked in: `connector/nosql/qdrant.go` and `db/migrations/tenant/000029_qdrant_connector.up.sql` (etlfunnel), `core/{source,destination}/qdrant/*.go`, `connector/nosql/qdrant/qdrant.go`, `core/coreinterface/qdrant_{bridge,pipeline}.go`, `models/{nosql_model,bridge_model,connection_model}.go`, `enum/connector.go`, `logger/codes.go` (etlfunnel-execution), `web/src/component/modal/connector/hub/QdrantConnectorForm.tsx` (etlfunnel). Viewed in the browser (dev server): the new page and the connector-hub anchor both render.
+
+Open: this was the one gap the Streamhouse findings (`plans/streamhouse-findings.md`) didn't flag — it predates the Qdrant connector. Still open from that doc: the `AuxiliaryHub` + `cast` cross-system pattern remains undocumented.
