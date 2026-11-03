@@ -1,6 +1,6 @@
 # Connector Catalog
 
-ETLFunnel has 23 connectors. Each one is a source, a destination, or both, and each exposes its own interface that you implement in a [connector entity](./connector-entity). This page is the map: what each connector can read, how, and where its reference page is.
+ETLFunnel has 24 connectors. Each one is a source, a destination, or both, and each exposes its own interface that you implement in a [connector entity](./connector-entity). This page is the map: what each connector can read, how, and where its reference page is.
 
 ## How a connector reads
 
@@ -34,6 +34,7 @@ Every destination is a function that turns a batch of records into the writes fo
 | Cassandra | `GenerateCQLQuery`, `FetchRecords` | [Cassandra](./nosql-cassandra) |
 | Kafka | `GenerateSubscription`, `GenerateAssignment`, `FetchRecords` | [Kafka](./nosql-kafka) |
 | RabbitMQ | `GenerateQueue`, `GenerateExchange`, `FetchRecords` | [RabbitMQ](./nosql-rabbitmq) |
+| Qdrant | `GenerateQuery` (scroll, get or vector search), `FetchRecords` | [Qdrant](./nosql-qdrant) |
 
 ## APIs
 

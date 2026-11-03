@@ -22,6 +22,7 @@ The Connector Hub allows you to configure and manage connections to various data
 - Cassandra
 - RabbitMQ
 - Kafka
+- Qdrant
 
 ### API
 - REST API
@@ -320,6 +321,25 @@ Kafka connector enables integration with Apache Kafka clusters for high-throughp
 - **By Topic Assignment**: Explicitly assign specific topic-partitions to consume, bypassing consumer-group rebalancing
 - **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with message production for data delivery
+
+### Qdrant Connector
+
+Qdrant connector integrates with Qdrant vector collections, supporting scroll, get-by-ID, and vector search as a source, and batched point writes as a destination.
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Host | Text | localhost | Qdrant server hostname or IP address |
+| Port | Number | 6334 | Qdrant gRPC port number |
+| API Key | Password | - | API key for authentication |
+| Use TLS | Boolean | false | Enable TLS encryption |
+| Skip TLS Verification | Boolean | false | Skip TLS certificate verification (only shown when Use TLS is on) |
+
+**Data Processing Strategies:**
+- **By Query**: Scroll through a collection, fetch points by ID, or run a vector search, depending on the query type returned
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping)
+- **By Write Operation**: Use as destination; each payload upserts, deletes, or updates the payload of one point, batched per collection
 
 ## API Connectors
 

@@ -86,6 +86,7 @@ const sidebars: SidebarsConfig = {
                         'nosql-elasticsearch',
                         'nosql-kafka',
                         'nosql-mongo',
+                        'nosql-qdrant',
                         'nosql-redis',
                         'nosql-rabbitmq',
                     ],

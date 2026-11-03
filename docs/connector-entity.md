@@ -20,6 +20,7 @@ Before diving into Connector Entities, it's important to understand the broader 
 - Cassandra
 - RabbitMQ
 - Kafka
+- Qdrant
 
 ### 3. API Connectors
 - REST API
