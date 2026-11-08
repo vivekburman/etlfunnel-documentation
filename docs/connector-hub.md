@@ -26,6 +26,8 @@ The Connector Hub allows you to configure and manage connections to various data
 
 ### API
 - REST API
+- GraphQL
+- SOAP
 
 ### File
 - CSV
@@ -352,17 +354,20 @@ REST API connector enables integration with any HTTP/HTTPS API endpoint, support
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | Base URL | Text | - | Root URL of the API |
-| Auth Type | Dropdown | none | Authentication method: none, bearer, basic, api_key, oauth2, custom |
+| Auth Type | Dropdown | none | Authentication method: none, bearer, basic, api_key, oauth2, oauth2Refresh, custom |
 | Token | Text | - | Bearer token (for bearer auth) |
 | API Key | Text | - | API key value |
 | API Key Header | Text | - | Header name for the API key |
 | Client ID | Text | - | OAuth2 client ID |
 | Client Secret | Text | - | OAuth2 client secret |
+| Refresh Token | Text | - | Stored refresh token (for oauth2Refresh) |
 | Token URL | Text | - | OAuth2 token endpoint |
 | Scopes | List | - | OAuth2 scopes |
 | Username | Text | - | Username (for basic auth) |
 | Password | Password | - | Password (for basic auth) |
 | TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+
+**oauth2Refresh** exchanges `Refresh Token` for an access token on the first request and again when it expires, using `Client ID` and `Token URL` (`Client Secret` is sent too, if set). It lives in the shared transport builder used by REST API, GraphQL and SOAP alike.
 
 **Custom Auth Parameters** (when Auth Type is `custom`):
 
@@ -382,6 +387,69 @@ REST API connector enables integration with any HTTP/HTTPS API endpoint, support
 - **By Cursor**: Follow a cursor/token returned by the API to fetch the next page
 - **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping, e.g. CDC resume state)
 - **By Write Operation**: Use as destination with HTTP request generation for data delivery
+
+### GraphQL Connector
+
+GraphQL connector enables integration with any GraphQL endpoint, running one query per source read (optionally cursor-paged through a `nodes`/`edges` connection) and one mutation per destination write. It shares its connection parameters and auth options with [REST API](#rest-api-connector).
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Endpoint | Text | - | GraphQL endpoint URL |
+| Auth Type | Dropdown | none | Authentication method: none, bearer, basic, api_key, oauth2, oauth2Refresh, custom |
+| Token | Text | - | Bearer token (for bearer auth) |
+| API Key | Text | - | API key value |
+| API Key Header | Text | - | Header name for the API key |
+| Client ID | Text | - | OAuth2 client ID |
+| Client Secret | Text | - | OAuth2 client secret |
+| Refresh Token | Text | - | Stored refresh token (for oauth2Refresh) |
+| Token URL | Text | - | OAuth2 token endpoint |
+| Scopes | List | - | OAuth2 scopes |
+| Username | Text | - | Username (for basic auth) |
+| Password | Password | - | Password (for basic auth) |
+| TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+
+Custom Auth Parameters are the same as [REST API's](#rest-api-connector), when Auth Type is `custom`.
+
+**Data Processing Strategies:**
+- **By Query**: Run a GraphQL query, optionally cursor-paging through the result
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping)
+- **By Write Operation**: Use as destination; each payload runs one mutation
+
+See the [GraphQL connector reference](graphql.md) for the hook interfaces and how paging and record shapes work.
+
+### SOAP Connector
+
+SOAP connector enables integration with any SOAP 1.1 or 1.2 endpoint, wrapping each call in an envelope and running one request per source read (optionally cursor-paged by substituting a placeholder in the request body) and one request per destination write. It shares its connection parameters and auth options with [REST API](#rest-api-connector).
+
+**Configuration Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Endpoint | Text | - | SOAP endpoint URL |
+| SOAP Version | Dropdown | 1.1 | `1.1` or `1.2` |
+| Auth Type | Dropdown | none | Authentication method: none, bearer, basic, api_key, oauth2, oauth2Refresh, custom |
+| Token | Text | - | Bearer token (for bearer auth) |
+| API Key | Text | - | API key value |
+| API Key Header | Text | - | Header name for the API key |
+| Client ID | Text | - | OAuth2 client ID |
+| Client Secret | Text | - | OAuth2 client secret |
+| Refresh Token | Text | - | Stored refresh token (for oauth2Refresh) |
+| Token URL | Text | - | OAuth2 token endpoint |
+| Scopes | List | - | OAuth2 scopes |
+| Username | Text | - | Username (for basic auth) |
+| Password | Password | - | Password (for basic auth) |
+| TLS Skip Verify | Boolean | false | Skip TLS certificate verification |
+
+Custom Auth Parameters are the same as [REST API's](#rest-api-connector), when Auth Type is `custom`.
+
+**Data Processing Strategies:**
+- **By Query**: Send a SOAP request body, optionally cursor-paging by re-sending it with an advancing placeholder
+- **By Custom Function**: User-implemented data extraction method returning `<-chan *models.Record` (each record carries a `Data` map plus a `Meta` map for engine-internal position/cursor bookkeeping)
+- **By Write Operation**: Use as destination; each payload sends one SOAP request
+
+See the [SOAP connector reference](soap.md) for the hook interfaces and how paging and record shapes work.
 
 ## File Connectors
 

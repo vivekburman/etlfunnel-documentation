@@ -33,7 +33,7 @@ Teams that need to:
 - **Build real-time data products** by streaming changes from source databases as they happen.
 - **Replicate across environments**: staging, regional or per-tenant copies of a primary.
 
-There are 24 connectors: relational databases (MySQL, MariaDB, PostgreSQL, SQL Server, Oracle), non-relational stores and queues (Redis, MongoDB, Elasticsearch, Cassandra, Kafka, RabbitMQ, Qdrant), REST APIs, files (CSV, JSON, Excel, Parquet, Avro, fixed width), warehouses (Snowflake, Redshift, BigQuery) and object storage (S3, Google Cloud Storage).
+There are 26 connectors: relational databases (MySQL, MariaDB, PostgreSQL, SQL Server, Oracle), non-relational stores and queues (Redis, MongoDB, Elasticsearch, Cassandra, Kafka, RabbitMQ, Qdrant), APIs (REST, GraphQL, SOAP), files (CSV, JSON, Excel, Parquet, Avro, fixed width), warehouses (Snowflake, Redshift, BigQuery) and object storage (S3, Google Cloud Storage).
 
 ## Self-hosted by design
 

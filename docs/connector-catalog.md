@@ -1,6 +1,6 @@
 # Connector Catalog
 
-ETLFunnel has 24 connectors. Each one is a source, a destination, or both, and each exposes its own interface that you implement in a [connector entity](./connector-entity). This page is the map: what each connector can read, how, and where its reference page is.
+ETLFunnel has 26 connectors. Each one is a source, a destination, or both, and each exposes its own interface that you implement in a [connector entity](./connector-entity). This page is the map: what each connector can read, how, and where its reference page is.
 
 ## How a connector reads
 
@@ -41,6 +41,8 @@ Every destination is a function that turns a batch of records into the writes fo
 | Connector | Source methods | Reference |
 |---|---|---|
 | REST API | `GeneratePaginateRequest`, `GenerateCursorRequest`, `GenerateWebhookRequest`, `FetchRecords` | [REST API](./restapi) |
+| GraphQL | `GenerateQuery` (cursor-paged), `FetchRecords` | [GraphQL](./graphql) |
+| SOAP | `GenerateQuery` (cursor-paged), `FetchRecords` | [SOAP](./soap) |
 
 ## Files
 
