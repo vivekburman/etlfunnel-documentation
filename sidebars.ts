@@ -97,6 +97,8 @@ const sidebars: SidebarsConfig = {
                     label: 'APIs',
                     items: [
                         'restapi',
+                        'graphql',
+                        'soap',
                     ],
                 },
                 {

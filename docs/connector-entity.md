@@ -24,6 +24,8 @@ Before diving into Connector Entities, it's important to understand the broader 
 
 ### 3. API Connectors
 - REST API
+- GraphQL
+- SOAP
 
 ### 4. File Connectors
 - CSV

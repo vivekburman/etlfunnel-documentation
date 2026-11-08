@@ -300,6 +300,12 @@ Codes here are per-connector, per-*category*, not per log line — every connect
 | `EF-E665`      | Ad-hoc        | Connectivity test failed: the source couldn't be reached or authenticated, or the connector has no check |
 | `EF-E666`      | Qdrant        | Dispatch/config error                     |
 | `EF-E667`      | Qdrant        | Request execution error                   |
+| `EF-E668`      | GraphQL       | Dispatch/config error                     |
+| `EF-E669`      | GraphQL       | Request execution error                   |
+| `EF-E670`      | GraphQL       | Response error (`errors[]` in the body, or the data could not be extracted) |
+| `EF-E671`      | SOAP          | Dispatch/config error                     |
+| `EF-E672`      | SOAP          | Request execution error                   |
+| `EF-E673`      | SOAP          | Response error (a Fault, or the data could not be extracted) |
 
 For the connectors documented under [Code Reference](sql-mysql.md), this is the range to watch alongside the connector's own docs: a `ParseFn` you author (e.g. on `MySQLSourceBinlogOptions`, `RedisSourceKeysOptions`) returning an error surfaces here under that connector's "read/decode" code, not under `EF-E401` — parsing errors during capture are distinct from transform errors, even though both come from client-authored functions. `EF-E661` also covers `ReadByStream`'s transaction lifecycle for [Snowflake](dw-snowflake.md) — a failed consume-and-commit or rollback logs here, not under `EF-E7xx`.
 
@@ -309,9 +315,11 @@ For [BigQuery](dw-bigquery.md), `EF-E662` is a failed query (syntax error, missi
 
 For [Qdrant](nosql-qdrant.md), `EF-E666` fires on dispatch — an invalid filter, or an unsupported `QueryType` — and `EF-E667` on a failed scroll, get or search request, including a missing collection. Qdrant's write path has no destination code of its own; a failed write surfaces through `EF-E201`/`EF-E202` instead, same as the other NoSQL destinations.
 
+For [GraphQL](graphql.md), `EF-E668` fires on dispatch — an unknown capture method, or your `GenerateQuery` hook returning an error. `EF-E669` is a failed HTTP request to the endpoint. `EF-E670` covers a response that carried a top-level `errors` array, or one where the data couldn't be extracted at `DataPath` (missing key, wrong shape, missing `pageInfo` when paging). [SOAP](soap.md) works the same way one code range over: `EF-E671` for dispatch, `EF-E672` for a failed HTTP request, and `EF-E673` for a `<soap:Fault>` response or a `DataPath` that couldn't be extracted.
+
 ### EF-E7xx — Destination connector errors
 
-Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-family, warehouse and object-store destinations that log their own write errors directly. Other destinations (NoSQL, REST API, file-based) don't have dedicated codes here because their write failures propagate up through the bridge and are already covered by `EF-E201`/`EF-E202`.
+Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-family, warehouse, object-store, GraphQL and SOAP destinations that log their own write errors directly. Other destinations (NoSQL, REST API, file-based) don't have dedicated codes here because their write failures propagate up through the bridge and are already covered by `EF-E201`/`EF-E202`.
 
 | Code           | Connector | Category                 |
 | -------------- | --------- | ------------------------ |
@@ -334,6 +342,10 @@ Same per-connector, per-category convention as `EF-E6xx`, scoped to the SQL-fami
 | `EF-E717`      | GCS       | Upload error             |
 | `EF-E718`      | BigQuery  | Load job error           |
 | `EF-E719`      | Agent     | Row sink write/flush error |
+| `EF-E720`      | GraphQL   | Mutation error            |
+| `EF-E721`      | SOAP      | Request error             |
+
+GraphQL and SOAP are the exception to this section's own rule: unlike the other API-family and NoSQL destinations, each logs its own write error directly, same as the SQL-family and warehouse destinations above. `EF-E720` is a failed mutation call for [GraphQL](graphql.md); `EF-E721` is a failed request for [SOAP](soap.md). Both destinations run their payloads in order and stop at the first failure, so a logged error means every payload before it already succeeded and everything after it was never attempted.
 
 Object-store and warehouse destinations log their own errors here too. [S3](s3.md) uploads are not transactional: each payload is one `PutObject`, so an `EF-E716` means the payloads before the failing one are already written and the later ones were not attempted. [GCS](gcs.md) behaves the same way with `EF-E717`.
 
