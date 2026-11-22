@@ -41,6 +41,10 @@ To keep an extended outage from flooding the channel, alerts for one run back of
 
 When the job finishes, its alerts stop.
 
+### Runs split across runners
+
+A [distributed run](./distributed-runs) has one webhook for the whole run. Each machine alerts on its own errors with its own backoff, so errors on three machines send three alerts. An alert names the run and, for a split run, the machine, and its purpose reads like "... (machine 2 of 3)" or "... (plan)".
+
 ## What messages never contain
 
 Messages name what happened, who did it and where. They never include a reviewer's comment and carry no link. A message that fails to send never holds up or undoes the action behind it.

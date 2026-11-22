@@ -52,7 +52,7 @@ Resetting a password signs the person out everywhere. Nobody can deactivate or d
 
 ## What you see
 
-ETLFunnel hides what you cannot do instead of greying it out. A Viewer has no Submit button; someone without the Staging permission never sees **Submit review** on the Staging page. The one exception is a page you are not allowed into, which stays visible but locked.
+ETLFunnel hides what you cannot do instead of greying it out. A Viewer has no Submit button; someone without the Staging permission never sees **Submit review** on the Staging page. Views and tabs are open to everyone in the workspace, so nothing is locked: you can always look, and the actions you cannot take are simply not offered. The same goes for the write options on the run form: someone who cannot run in a tier is not offered that tier's choices, and the **Preset** entry appears only for people who can run somewhere.
 
 The same rules apply however you reach ETLFunnel: through the browser, the API or an AI assistant using [MCP](./mcp). MCP is narrower still. It works on drafts like a person does, but it has no tools to submit, review or approve change sets, cut packages, act on stages, or manage users.
 

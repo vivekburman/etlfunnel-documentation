@@ -24,10 +24,11 @@ An Orchestration Hook is a pre-step that decides how many replicas of a flow or 
 - Data volume (number of rows, partitions, tables)
 - Connection characteristics (source latency, throughput)
 
-You can define hooks at two levels:
+You can define hooks at three levels:
 
 - **Flow Level** — to replicate entire flows
 - **Pipeline Level** — to replicate pipelines inside a flow
+- **Machine Level** — to split one run across several runners, each with its own slice of the data. This level sits above the other two and replaces neither. See [Runner at Scale](./distributed-runs).
 
 ## The Implementation
 

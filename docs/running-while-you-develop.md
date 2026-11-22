@@ -14,6 +14,8 @@ When you start a run, the run window asks where the logic should come from.
 
 You then choose the source, destination and any auxiliary database for the run. Only development databases are offered. A draft run writes to them for real, so point it at a copy of the data, never at something you would mind losing.
 
+If you start the same kind of run again and again, save its answers as a [preset](./presets) and start from it. For a job too big for one machine, turn on **Split across several runners** in the run window; see [Runner at Scale](./distributed-runs).
+
 A draft run is labelled as such in the run list, along with the change set it came from. It sends no webhook alerts and never counts as a run of any stage.
 
 :::tip A run keeps its own copy

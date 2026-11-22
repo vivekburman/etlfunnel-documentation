@@ -194,6 +194,12 @@ Jobs run as their own detached processes. **Stopping or restarting the runner, o
 
 Open the **Runner** page in the ETLFunnel UI. A healthy runner's **Updated Timestamp** is within the last 5 seconds.
 
+The same page shows what each runner reports about itself: its **Version** (the runner's own version), its **Cores** and its **Memory**. These are what a [machine orchestrator](./distributed-runs#write-a-machine-orchestrator) is told about each runner when it splits a run.
+
+## Running at scale
+
+One big job can be split across several runners. Register one runner per machine you want to use, give each the tag of the stage it will work in, and keep them online. See [Runner at Scale](./distributed-runs) for how to split a run, and the [Public API](./public-api) for starting runs from a script on the runners you name.
+
 ## Troubleshooting
 
 | Symptom | What to do |
