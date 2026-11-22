@@ -39,7 +39,7 @@ const sidebars: SidebarsConfig = {
             collapsed: true,
             type: 'category',
             label: '4 · Run and watch',
-            items: ['creating-a-new-build', 'running-while-you-develop', 'ef-codes'],
+            items: ['creating-a-new-build', 'running-while-you-develop', 'presets', 'distributed-runs', 'ef-codes'],
         },
         {
             collapsed: true,
@@ -57,7 +57,7 @@ const sidebars: SidebarsConfig = {
             collapsed: true,
             type: 'category',
             label: '7 · Automate',
-            items: ['integration-webhook', 'mcp'],
+            items: ['public-api', 'personal-access-token', 'integration-webhook', 'mcp'],
         },
         {
             collapsed: true,
